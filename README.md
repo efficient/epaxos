@@ -4,7 +4,7 @@ epaxos
 This repository contains the Go implementations of:
 
 * Egalitarian Paxos (EPaxos), a new distributed consensus algorithm based on
-Paxos EPaxos achieves three goals: (1) availability \emph{without interruption}
+Paxos EPaxos achieves three goals: (1) availability *without interruption*
 as long as a simple majority of replicas are reachable---its availability is not
 interrupted when replicas crash or fail to respond; (2) uniform load balancing
 across all replicas---no replicas experience higher load because they have
