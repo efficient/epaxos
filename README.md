@@ -23,4 +23,5 @@ the common case or after at most two rounds in any case.
 * Generalized Paxos
 
 AUTHORS: Iulian Moraru, David G. Andersen -- Carnegie Mellon University
+
          Michael Kaminsky -- Intel Labs
