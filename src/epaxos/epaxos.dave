@@ -1,0 +1,1420 @@
+package epaxos
+
+import (
+    "net"
+    "io"
+    "log"
+    "dlog"
+    "time"
+    "state"
+    "genericsmr"
+    "genericsmrproto"
+    "epaxosproto"
+    "bufio"
+    "encoding/binary"
+    "rdtsc"
+    "bloomfilter"
+    "math"
+)
+
+const CHAN_BUFFER_SIZE = 200000
+const MAX_DEPTH_DEP = 10
+const TRUE = uint8(1)
+const FALSE = uint8(0)
+const DS = 5
+const ADAPT_TIME_SEC = 10
+
+const MAX_BATCH = 1000
+
+const BF_K = 6
+const BF_M_N = 64.0
+var bf_PT uint32
+
+const DO_CHECKPOINTING = false
+const HT_INIT_SIZE = 14000
+const CHECKPOINT_PERIOD = 10000
+var cpMarker []state.Command
+var cpcounter = 0
+
+type Replica struct {
+    *genericsmr.Replica                                 // extends a generic Paxos replica
+    proposeChan chan *Propose                           // channel for client proposals
+    prepareChan chan *epaxosproto.Prepare               // channel for Prepare's
+    preAcceptChan chan *epaxosproto.PreAccept           // channel for PreAccept's
+    delayedPreAcceptChan chan *epaxosproto.PreAccept
+    acceptChan chan *epaxosproto.Accept                 // channel for Accept's
+    commitChan chan *epaxosproto.Commit                 // channel for Commit's
+    commitShortChan chan *epaxosproto.CommitShort       // channel for Commit's
+    prepareReplyChan chan *epaxosproto.PrepareReply     // channel for Prepare replies
+    preAcceptReplyChan chan *epaxosproto.PreAcceptReply // channel for PreAccept replies
+    preAcceptOKChan chan *epaxosproto.PreAcceptOK       // channel for PreAccept replies
+    acceptReplyChan chan *epaxosproto.AcceptReply       // channel for Accept replies
+    beaconChan chan *Beacon
+    InstanceSpace [][]*Instance                         // the space of all instances (used and not yet used)
+    crtInstance []int32                                 // highest active instance numbers that this replica knows about
+    Shutdown bool
+    counter int
+    ExecedUpTo []int32                                  // instance up to which all commands have been executed (including iteslf)
+    exec *Exec
+    conflicts []map[state.Key]int32
+    maxSeq int32
+    latestCPReplica int32
+    latestCPInstance int32
+}
+
+type Propose struct {
+    *genericsmrproto.Propose
+    reply *bufio.Writer
+}
+
+type Instance struct {
+    Cmds []state.Command
+    ballot int32
+    Status int8
+    Seq int32
+    Deps [DS]int32
+    lb *LeaderBookkeeping
+    Index, Lowlink int
+    bfilter *bloomfilter.Bloomfilter
+}
+
+type LeaderBookkeeping struct {
+    clientProposals []*Propose
+    maxRecvBallot int32
+    prepareOKs int
+    allEqual bool
+    preAcceptOKs int
+    acceptOKs int
+    nacks int
+}
+
+type Beacon struct {
+    rid int32
+    timestamp uint64
+}
+
+var ewma []float64
+var closestPeer []int32
+
+func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply bool, beacon bool, durable bool) *Replica {
+    r := &Replica{
+        genericsmr.NewReplica(id, peerAddrList, thrifty, exec, dreply),
+        make(chan *Propose, CHAN_BUFFER_SIZE),
+        make(chan *epaxosproto.Prepare, CHAN_BUFFER_SIZE),
+        make(chan *epaxosproto.PreAccept, CHAN_BUFFER_SIZE),
+        make(chan *epaxosproto.PreAccept, CHAN_BUFFER_SIZE),
+        make(chan *epaxosproto.Accept, CHAN_BUFFER_SIZE),
+        make(chan *epaxosproto.Commit, CHAN_BUFFER_SIZE),
+        make(chan *epaxosproto.CommitShort, CHAN_BUFFER_SIZE),
+        make(chan *epaxosproto.PrepareReply, CHAN_BUFFER_SIZE),
+        make(chan *epaxosproto.PreAcceptReply, CHAN_BUFFER_SIZE * 3),
+        make(chan *epaxosproto.PreAcceptOK, CHAN_BUFFER_SIZE * 3),
+        make(chan *epaxosproto.AcceptReply, CHAN_BUFFER_SIZE * 2),
+        make(chan *Beacon, CHAN_BUFFER_SIZE),
+        make([][]*Instance, len(peerAddrList)),
+        make([]int32, len(peerAddrList)),
+        false,
+        0,
+        make([]int32, len(peerAddrList)),
+        nil,
+        nil,//make([]map[state.Key]int32, len(peerAddrList)),
+        0,
+        0,
+        -1}
+
+    r.Beacon = beacon
+    r.Durable = durable
+    ewma = make([]float64, r.N)
+    closestPeer = make([]int32, r.N)
+
+    for i := 0; i < r.N; i++ {
+        r.InstanceSpace[i] = make([]*Instance, 2 * 1024 * 1024)
+        r.crtInstance[i] = 0
+        r.ExecedUpTo[i] = -1
+        //r.conflicts[i] = make(map[state.Key]int32, HT_INIT_SIZE)
+        ewma[i] = 0.0
+        closestPeer[i] = int32((int(r.Id) + 1 + i) % r.N)
+    }
+
+    for bf_PT = 1; math.Pow(2, float64(bf_PT)) / float64(MAX_BATCH) < BF_M_N; {
+        bf_PT++
+    }
+
+    r.exec = &Exec{r}
+
+    cpMarker = make([]state.Command, 0)
+
+    go r.run()
+
+    return r
+}
+
+//append a log entry to stable storage
+func (r *Replica) recordInstanceMetadata(inst *Instance) {
+    if !r.Durable {
+        return
+    }
+
+    var b [9 + DS * 4]byte
+    binary.LittleEndian.PutUint32(b[0:4], uint32(inst.ballot))
+    b[4] = byte(inst.Status)
+    binary.LittleEndian.PutUint32(b[5:9], uint32(inst.Seq))
+    l := 9
+    for _, dep := range inst.Deps {
+        binary.LittleEndian.PutUint32(b[l : l + 4], uint32(dep))
+        l += 4
+    }
+    r.StableStore.Write(b[:])
+}
+
+//write a sequence of commands to stable storage
+func (r *Replica) recordCommands(cmds []state.Command) {
+    if !r.Durable {
+        return
+    }
+
+    if cmds == nil {
+        return
+    }
+    for i := 0; i < len(cmds); i++ {
+        cmds[i].Marshal(io.Writer(r.StableStore))
+    }
+}
+
+//sync with the stable store
+func (r *Replica) sync() {
+    if !r.Durable {
+        return
+    }
+
+    r.StableStore.Sync()
+}
+
+/* Client communication */
+
+func (r *Replica) handleClientConnection(conn net.Conn) error {
+    reader := bufio.NewReader(conn)
+    writer := bufio.NewWriter(conn)
+    var msgType byte//:= make([]byte, 1)
+    var err error
+    for !r.Shutdown && err == nil {
+
+        if msgType, err = reader.ReadByte(); err != nil {
+            break
+        }
+
+        switch (uint8(msgType)) {
+
+        case genericsmrproto.PROPOSE:
+            prop := new(genericsmrproto.Propose)
+            if err = prop.Unmarshal(reader); err != nil {
+               break
+            }
+            r.proposeChan <- &Propose{prop, writer}
+            break
+
+        case genericsmrproto.READ:
+            read := new(genericsmrproto.Read)
+            if err = read.Unmarshal(reader); err != nil {
+               break
+            }
+            //r.readChan <- read
+            break
+
+        case genericsmrproto.PROPOSE_AND_READ:
+            pr := new(genericsmrproto.ProposeAndRead)
+            if err = pr.Unmarshal(reader); err != nil {
+                break
+            }
+            //r.proposeAndReadChan <- pr
+            break
+        }
+    }
+    if err != nil && err != io.EOF {
+        log.Println("Error when reading from client connection:", err)
+        return err
+    }
+    return nil
+}
+
+/* Inter-replica communication */
+
+func (r *Replica) handleReplicaConnection(rid int, reader *bufio.Reader) error {
+    var msgType byte
+    var err error
+
+    var gbeacon genericsmrproto.Beacon
+    var gbeaconReply genericsmrproto.BeaconReply
+
+    for !r.Shutdown && err == nil {
+
+        if msgType, err = reader.ReadByte(); err != nil {
+            break
+        }
+
+        switch (uint8(msgType)) {
+
+        case epaxosproto.PREPARE:
+            prep := new(epaxosproto.Prepare)
+            if err = prep.Unmarshal(reader); err != nil {
+               break
+            }
+            r.prepareChan <- prep
+            break
+
+        case epaxosproto.PREPARE_REPLY:
+            preply := new(epaxosproto.PrepareReply)
+            if err = preply.Unmarshal(reader); err != nil {
+               break
+            }
+            r.prepareReplyChan <- preply
+            break
+
+        case epaxosproto.PREACCEPT:
+            preacc := new(epaxosproto.PreAccept)
+            if err = preacc.Unmarshal(reader); err != nil {
+                break
+            }
+            r.preAcceptChan <- preacc
+            break
+
+        case epaxosproto.PREACCEPT_REPLY:
+            preaccreply := new(epaxosproto.PreAcceptReply)
+            if err = preaccreply.Unmarshal(reader); err != nil {
+                break
+            }
+            r.preAcceptReplyChan <- preaccreply
+            break
+
+        case epaxosproto.PREACCEPT_OK:
+            preaccreply := new(epaxosproto.PreAcceptOK)
+            if err = preaccreply.Unmarshal(reader); err != nil {
+                break
+            }
+            r.preAcceptOKChan <- preaccreply
+            break
+
+        case epaxosproto.ACCEPT:
+            acc := new(epaxosproto.Accept)
+            if err = acc.Unmarshal(reader); err != nil {
+                break
+            }
+            r.acceptChan <- acc
+            break
+
+        case epaxosproto.ACCEPT_REPLY:
+            accreply := new(epaxosproto.AcceptReply)
+            if err = accreply.Unmarshal(reader); err != nil {
+                break
+            }
+            r.acceptReplyChan <- accreply
+            break
+
+        case epaxosproto.COMMIT:
+            commit := new(epaxosproto.Commit)
+            if err = commit.Unmarshal(reader); err != nil {
+                break
+            }
+            r.commitChan <- commit
+            break
+
+        case epaxosproto.COMMIT_SHORT:
+            commit := new(epaxosproto.CommitShort)
+            if err = commit.Unmarshal(reader); err != nil {
+                break
+            }
+            r.commitShortChan <- commit
+            break
+
+        case epaxosproto.GENERIC_SMR_BEACON:
+            if err = gbeacon.Unmarshal(reader); err != nil {
+                break
+            }
+            beacon := &Beacon{int32(rid), gbeacon.Timestamp}
+            r.beaconChan <- beacon
+            break
+
+        case epaxosproto.GENERIC_SMR_BEACON_REPLY:
+            if err = gbeaconReply.Unmarshal(reader); err != nil {
+                break
+            }
+            //TODO: UPDATE STUFF
+            ewma[rid] = 0.99 * ewma[rid] + 0.01 * float64(rdtsc.Cputicks() - gbeaconReply.Timestamp)
+            log.Println(ewma)
+            break
+        }
+    }
+    if err != nil {
+        log.Println("Error when reading from the connection with replica", rid, err)
+        r.Alive[rid] = false
+        return err
+    }
+    return nil
+}
+
+func (r *Replica) replyPropose(reply *genericsmrproto.ProposeReply, w *bufio.Writer) {
+    //w.WriteByte(genericsmrproto.PROPOSE_REPLY)
+    reply.Marshal(w)
+    w.Flush()
+}
+
+func (r *Replica) replyPrepare(reply *epaxosproto.PrepareReply, w *bufio.Writer) {
+    w.WriteByte(epaxosproto.PREPARE_REPLY)
+    reply.Marshal(w)
+    w.Flush()
+}
+
+func (r *Replica) replyPreAccept(reply *epaxosproto.PreAcceptReply, w *bufio.Writer) {
+    w.WriteByte(epaxosproto.PREACCEPT_REPLY)
+    reply.Marshal(w)
+    w.Flush()
+}
+
+func (r *Replica) replyAccept(reply *epaxosproto.AcceptReply, w *bufio.Writer) {
+    w.WriteByte(epaxosproto.ACCEPT_REPLY)
+    reply.Marshal(w)
+    w.Flush()
+}
+
+func (r *Replica) sendBeacon(w *bufio.Writer) {
+    w.WriteByte(epaxosproto.GENERIC_SMR_BEACON)
+    beacon := &genericsmrproto.Beacon{rdtsc.Cputicks()}
+    beacon.Marshal(w)
+    w.Flush()
+}
+
+func (r *Replica) replyBeacon(w *bufio.Writer, beacon *Beacon) {
+    w.WriteByte(epaxosproto.GENERIC_SMR_BEACON_REPLY)
+    rb := &genericsmrproto.BeaconReply{beacon.timestamp}
+    rb.Marshal(w)
+    w.Flush()
+}
+
+
+var conflicted int
+var happy int
+var slow int
+var weird int
+/* Client connections dispatcher */
+func (r *Replica) waitForClientConnections() {
+    for !r.Shutdown {
+        conn, err := r.Listener.Accept()
+        if err != nil {
+            log.Println("Accept error:", err)
+            continue
+        }
+        log.Println(conflicted, "conflicted")
+        log.Println(happy, "happy")
+        log.Println(slow, "slow")
+        log.Println(weird, "weird")
+        conflicted, happy, slow, weird = 0, 0, 0, 0
+        go r.handleClientConnection(conn)
+    }
+}
+
+var clockChan chan bool
+func (r *Replica) clock() {
+//    for !r.Shutdown && r.Beacon {
+    for !r.Shutdown {
+        time.Sleep(1000 * 1000 * 5)
+        clockChan <- true
+    }
+}
+
+func (r *Replica) stopAdapting() {
+    time.Sleep(1000 * 1000 * 1000 * ADAPT_TIME_SEC)
+    r.Beacon = false
+    time.Sleep(1000 * 1000 * 1000)
+
+/*    for i := 0; i < r.N; i++ {
+        min := i
+        for j := i + 1; j < r.N; j++ {
+            if ewma[closestPeer[j]] < ewma[closestPeer[min]] {
+                min = j
+            }
+        }
+        aux := closestPeer[i]
+        closestPeer[i] = closestPeer[min]
+        closestPeer[min] = aux
+    }*/
+
+    max := ewma[closestPeer[r.N - 2]]
+    maxind := r.N - 2
+    for i := 0; i < r.N - 2; i++ {
+        if ewma[closestPeer[i]] > max {
+            max = ewma[closestPeer[i]]
+            maxind = i
+        }
+    }
+    aux := closestPeer[maxind]
+    closestPeer[maxind] = closestPeer[r.N - 2]
+    closestPeer[r.N - 2] = aux
+
+    log.Println(closestPeer)
+}
+
+
+/* ============= */
+
+/* Main event processing loop */
+
+func (r *Replica) run() {
+    r.ConnectToPeers()
+
+    for rid, peerReader := range r.PeerReaders {
+        if int32(rid) == r.Id {
+            continue
+        }
+        go r.handleReplicaConnection(rid, peerReader)
+    }
+
+    dlog.Println("Waiting for client connections")
+
+    go r.waitForClientConnections()
+
+    if r.Exec {
+        go r.executeCommands()
+    }
+
+    //if r.Beacon {
+        clockChan = make(chan bool, 1)
+        go r.clock()
+        //go r.stopAdapting()
+    //}
+
+    for !r.Shutdown {
+
+        select {
+
+        case prepare := <-r.prepareChan:
+            //got a Prepare message
+            dlog.Printf("Received Prepare for instance %d.%d\n", prepare.Replica, prepare.Instance)
+            r.handlePrepare(prepare)
+            break
+
+        case preAccept := <-r.preAcceptChan:
+            //got a PreAccept message
+            dlog.Printf("Received PreAccept for instance %d.%d\n", preAccept.LeaderId, preAccept.Instance)
+            r.handlePreAccept(preAccept)
+            break
+
+        case preAccept := <-r.delayedPreAcceptChan:
+            //got a PreAccept message
+            dlog.Printf("Sending delayed PreAccept for instance %d.%d\n", preAccept.LeaderId, preAccept.Instance)
+            r.handleDelayedPreAccept(preAccept)
+            break
+
+        case accept := <-r.acceptChan:
+            //got an Accept message
+            dlog.Printf("Received Accept for instance %d.%d\n", accept.LeaderId, accept.Instance)
+            r.handleAccept(accept)
+            break
+
+        case commit := <-r.commitChan:
+            //got a Commit message
+            dlog.Printf("Received Commit for instance %d.%d\n", commit.LeaderId, commit.Instance)
+            r.handleCommit(commit)
+            break
+
+        case commit := <-r.commitShortChan:
+            //got a Commit message
+            dlog.Printf("Received Commit for instance %d.%d\n", commit.LeaderId, commit.Instance)
+            r.handleCommitShort(commit)
+            break
+
+        case prepareReply := <-r.prepareReplyChan:
+            //got a Prepare reply
+            dlog.Printf("Received PrepareReply for instance %d.%d\n", r.Id,  prepareReply.Instance)
+            r.handlePrepareReply(prepareReply)
+            break
+
+        case preAcceptReply := <-r.preAcceptReplyChan:
+            //got a PreAccept reply
+            dlog.Printf("Received PreAcceptReply for instance %d.%d\n", r.Id, preAcceptReply.Instance)
+            r.handlePreAcceptReply(preAcceptReply)
+            break
+
+        case preAcceptOK := <-r.preAcceptOKChan:
+            //got a PreAccept reply
+            dlog.Printf("Received PreAcceptOK for instance %d.%d\n", r.Id, preAcceptOK.Instance)
+            r.handlePreAcceptOK(preAcceptOK)
+            break
+
+        case acceptReply := <-r.acceptReplyChan:
+            //got an Accept reply
+            dlog.Printf("Received AcceptReply for instance %d.%d\n", r.Id, acceptReply.Instance)
+            r.handleAcceptReply(acceptReply)
+            break
+
+        case propose := <-r.proposeChan:
+            //got a Propose from a client
+            dlog.Printf("Proposal with op %d\n", propose.Command.Op)
+            r.handlePropose(propose)
+            break
+
+            for otherstuff := true; otherstuff; {
+
+                select {
+
+
+                case prepare := <-r.prepareChan:
+                    //got a Prepare message
+                    dlog.Printf("Received Prepare for instance %d.%d\n", prepare.Replica, prepare.Instance)
+                    r.handlePrepare(prepare)
+                    break
+
+                case preAccept := <-r.preAcceptChan:
+                    //got a PreAccept message
+                    dlog.Printf("Received PreAccept for instance %d.%d\n", preAccept.LeaderId, preAccept.Instance)
+                    r.handlePreAccept(preAccept)
+                    break
+
+                case preAccept := <-r.delayedPreAcceptChan:
+                    //got a PreAccept message
+                    dlog.Printf("Sending delayed PreAccept for instance %d.%d\n", preAccept.LeaderId, preAccept.Instance)
+                    r.handleDelayedPreAccept(preAccept)
+                    break
+
+                case accept := <-r.acceptChan:
+                    //got an Accept message
+                    dlog.Printf("Received Accept for instance %d.%d\n", accept.LeaderId, accept.Instance)
+                    r.handleAccept(accept)
+                    break
+
+                case commit := <-r.commitChan:
+                    //got a Commit message
+                    dlog.Printf("Received Commit for instance %d.%d\n", commit.LeaderId, commit.Instance)
+                    r.handleCommit(commit)
+                    break
+
+                case commit := <-r.commitShortChan:
+                    //got a Commit message
+                    dlog.Printf("Received Commit for instance %d.%d\n", commit.LeaderId, commit.Instance)
+                    r.handleCommitShort(commit)
+                    break
+
+                case prepareReply := <-r.prepareReplyChan:
+                    //got a Prepare reply
+                    dlog.Printf("Received PrepareReply for instance %d.%d\n", r.Id,  prepareReply.Instance)
+                    r.handlePrepareReply(prepareReply)
+                    break
+
+                case preAcceptReply := <-r.preAcceptReplyChan:
+                    //got a PreAccept reply
+                    dlog.Printf("Received PreAcceptReply for instance %d.%d\n", r.Id, preAcceptReply.Instance)
+                    r.handlePreAcceptReply(preAcceptReply)
+                    break
+
+                case preAcceptOK := <-r.preAcceptOKChan:
+                    //got a PreAccept reply
+                    dlog.Printf("Received PreAcceptOK for instance %d.%d\n", r.Id, preAcceptOK.Instance)
+                    r.handlePreAcceptOK(preAcceptOK)
+                    break
+
+                case acceptReply := <-r.acceptReplyChan:
+                    //got an Accept reply
+                    dlog.Printf("Received AcceptReply for instance %d.%d\n", r.Id, acceptReply.Instance)
+                    r.handleAcceptReply(acceptReply)
+                    break
+
+                case beacon := <-r.beaconChan:
+                    dlog.Printf("Received Beacon from replica %d with timestamp %d\n", beacon.rid, beacon.timestamp)
+                    r.replyBeacon(r.PeerWriters[beacon.rid], beacon)
+                    break
+
+                default:
+                    otherstuff = false
+                }
+            }
+
+        }
+    }
+}
+
+func (r *Replica) makeUniqueBallot(ballot int32) int32 {
+    return (ballot << 4) | r.Id
+}
+
+func (r *Replica) makeBallotLargerThan(ballot int32) int32 {
+    return r.makeUniqueBallot((ballot >> 4) + 1)
+}
+
+func (r *Replica) bcastPrepare(replica int32, instance int32, ballot int32) {
+    defer func() {
+        if err := recover(); err != nil {
+            dlog.Println("Prepare bcast failed:", err)
+        }
+    }()
+    args := &epaxosproto.Prepare{r.Id, replica, instance, ballot}
+
+    n := r.N - 1
+    if r.Thrifty {
+        n = r.N >> 1
+    }
+    q := r.Id
+    var w *bufio.Writer
+    for sent := 0; sent < n; {
+        q = (q + 1) % int32(r.N)
+        if q == r.Id {
+            dlog.Println("Not enough replicas alive!")
+            break
+        }
+        if !r.Alive[q] {
+            continue
+        }
+        sent++
+        w = r.PeerWriters[q]
+        w.WriteByte(epaxosproto.PREPARE)
+        args.Marshal(w)
+        w.Flush()
+    }
+}
+
+var pa epaxosproto.PreAccept
+
+func (r *Replica) bcastPreAccept(replica int32, instance int32, ballot int32, cmds []state.Command, seq int32, deps [DS]int32) {
+    defer func() {
+        if err := recover(); err != nil {
+            dlog.Println("PreAccept bcast failed:", err)
+        }
+    }()
+    pa.LeaderId = r.Id
+    pa.Replica = replica
+    pa.Instance = instance
+    pa.Ballot = ballot
+    pa.Command = cmds
+    pa.Seq = seq
+    pa.Deps = deps
+    args := &pa
+    //args := &epaxosproto.PreAccept{r.Id, replica, instance, ballot, command, seq, deps}
+
+    n := r.N - 1
+    if r.Thrifty {
+        n = r.N >> 1
+    }
+
+    var w *bufio.Writer
+    sent := 0
+    for q := 0; q < r.N - 1; q++ {
+        if !r.Alive[closestPeer[q]] {
+            continue
+        }
+        w = r.PeerWriters[closestPeer[q]]
+        w.WriteByte(epaxosproto.PREACCEPT)
+        args.Marshal(w)
+        w.Flush()
+        sent++
+        if sent >= n {
+            break
+        }
+    }
+    //go r.delayPreAccept(args)
+}
+
+func (r *Replica) delayPreAccept(pa *epaxosproto.PreAccept) {
+    time.Sleep(2000 * 1000 * 1000)
+    if (r.InstanceSpace[r.Id][pa.Instance]).lb.preAcceptOKs < r.N - 2 {
+        r.delayedPreAcceptChan <- pa
+    }
+}
+
+func (r *Replica) handleDelayedPreAccept(pa *epaxosproto.PreAccept) {
+    log.Println("DPA")
+    for i, w := range r.PeerWriters {
+        if int32(i) == r.Id || !r.Alive[i] {
+            continue
+        }
+        if int32(i) == (r.Id + 1) % int32(r.N) {
+            continue
+        }
+        w.WriteByte(epaxosproto.PREACCEPT)
+        pa.Marshal(w)
+        w.Flush()
+    }
+}
+
+
+var ea epaxosproto.Accept
+
+func (r *Replica) bcastAccept(replica int32, instance int32, ballot int32, count int32, seq int32, deps [DS]int32) {
+    defer func() {
+        if err := recover(); err != nil {
+            dlog.Println("Accept bcast failed:", err)
+        }
+    }()
+
+    ea.LeaderId = r.Id
+    ea.Replica = replica
+    ea.Instance = instance
+    ea.Ballot = ballot
+	ea.Count = count
+    ea.Seq = seq
+    ea.Deps = deps
+    args := &ea
+    //args := &epaxosproto.Accept{r.Id, replica, instance, ballot, command, seq, deps}
+
+    n := r.N - 1
+    if r.Thrifty {
+        n = r.N >> 1
+    }
+
+    var w *bufio.Writer
+    sent := 0
+    for q := 0; q < r.N - 1; q++ {
+        if !r.Alive[closestPeer[q]] {
+            continue
+        }
+        w = r.PeerWriters[closestPeer[q]]
+        w.WriteByte(epaxosproto.ACCEPT)
+        args.Marshal(w)
+        w.Flush()
+        sent++
+        if sent >= n {
+            break
+        }
+    }
+}
+
+var ec epaxosproto.Commit
+var ecs epaxosproto.CommitShort
+
+func (r *Replica) bcastCommit(replica int32, instance int32, cmds []state.Command, seq int32, deps [DS]int32) {
+    defer func() {
+        if err := recover(); err != nil {
+            dlog.Println("Commit bcast failed:", err)
+        }
+    }()
+    ec.LeaderId = r.Id
+    ec.Replica = replica
+    ec.Instance = instance
+    ec.Command = cmds
+    ec.Seq = seq
+    ec.Deps = deps
+    args := &ec
+    ecs.LeaderId = r.Id
+    ecs.Replica = replica
+    ecs.Instance = instance
+	ecs.Count = int32(len(cmds))
+    ecs.Seq = seq
+    ecs.Deps = deps
+    argsShort := &ecs
+    //args := &epaxosproto.Commit{r.Id, replica, instance, command, seq, deps}
+
+    var w *bufio.Writer
+    sent := 0
+    for q := 0; q < r.N - 1; q++ {
+        if !r.Alive[closestPeer[q]] {
+            continue
+        }
+        if r.Thrifty && sent >= r.N >> 1 {
+            w = r.PeerWriters[closestPeer[q]]
+            w.WriteByte(epaxosproto.COMMIT)
+            args.Marshal(w)
+            w.Flush()
+        } else {
+            w = r.PeerWriters[closestPeer[q]]
+            w.WriteByte(epaxosproto.COMMIT_SHORT)
+            argsShort.Marshal(w)
+            w.Flush()
+            sent++
+        }
+    }
+}
+
+func (r *Replica) clearHashtables() {
+    for q := 0; q < r.N; q++ {
+        r.conflicts[q] = make(map[state.Key]int32, HT_INIT_SIZE)
+    }
+}
+
+func (r *Replica) updateAttributes(cmds []state.Command, seq int32, deps [DS]int32, replica int32, instance int32) (int32, [DS]int32, bool) {
+    changed := false
+
+    for q := 0; q < r.N; q++ {
+        if r.Id != replica && int32(q) == replica {
+            continue
+        }
+		log.Printf("Checking %d\n instances", r.crtInstance[q] - deps[q])
+        for inst := r.crtInstance[q] - 1; inst > deps[q]; inst-- {
+            if r.InstanceSpace[q][inst] == nil || r.InstanceSpace[q][inst].bfilter == nil {
+                continue
+            }
+            found := false
+            for i := 0; i < len(cmds); i++ {
+                if r.InstanceSpace[q][inst].bfilter.CheckUint64(uint64(cmds[i].K)) {
+                    deps[q] = inst
+                    if seq <= r.InstanceSpace[q][inst].Seq {
+                        seq = r.InstanceSpace[q][inst].Seq + 1
+                    }
+                    changed = true
+                    found = true
+                    break
+                }
+            }
+            if found {
+                break
+            }
+        }
+    }
+    return seq, deps, changed
+}
+
+func (r *Replica) mergeAttributes(seq1 int32, deps1 [DS]int32, seq2 int32, deps2 [DS]int32) (int32, [DS]int32, bool) {
+    equal := true
+    if seq1 != seq2 {
+        equal = false
+        if seq2 > seq1 {
+            seq1 = seq2
+        }
+    }
+    for q := 0; q < r.N; q++ {
+        if int32(q) == r.Id {
+            continue
+        }
+        if deps1[q] != deps2[q] {
+            equal = false
+            if deps2[q] > deps1[q] {
+                deps1[q] = deps2[q]
+            }
+        }
+    }
+    return seq1, deps1, equal
+}
+
+func equal(deps1 *[DS]int32, deps2 *[DS]int32) bool {
+    for i := 0; i < len(deps1); i++ {
+        if deps1[i] != deps2[i] {
+            return false
+        }
+    }
+    return true
+}
+
+func bfFromCommands(cmds []state.Command) *bloomfilter.Bloomfilter {
+    if cmds == nil {
+        return nil
+    }
+
+    bf := bloomfilter.NewPowTwo(bf_PT, BF_K)
+
+    for i := 0; i < len(cmds); i++ {
+        bf.AddUint64(uint64(cmds[i].K))
+    }
+
+    return bf
+}
+
+func (r *Replica) handlePropose(propose *Propose) {
+    //TODO!! Handle client retries
+
+    batchSize := len(r.proposeChan) + 1
+    if batchSize > MAX_BATCH {
+        batchSize = MAX_BATCH
+    }
+
+    instNo := r.crtInstance[r.Id]
+    r.crtInstance[r.Id]++
+
+    dlog.Printf("Starting instance %d\n", instNo)
+    //log.Printf("Batching %d\n", batchSize)
+
+    r.startPhase1(r.Id, instNo, 0, propose, batchSize)
+}
+
+func (r *Replica) startPhase1(replica int32, instance int32, ballot int32, propose *Propose, batchSize int) {
+    //init command attributes
+
+    seq := int32(0)
+    var deps [DS]int32
+    for q := 0; q < r.N; q++ {
+        deps[q] = r.crtInstance[q] - 1
+        if deps[q] >= 0 && r.InstanceSpace[q][deps[q]] != nil && seq <= r.InstanceSpace[q][deps[q]].Seq {
+            seq = r.InstanceSpace[q][deps[q]].Seq
+        }
+    }
+
+    cmds := make([]state.Command, batchSize)
+
+    proposals := make([]*Propose, batchSize)
+
+    cmds[0] = propose.Command
+    proposals[0] = propose
+    for i := 1; i < batchSize; i++ {
+        prop := <-r.proposeChan
+        cmds[i] = prop.Command
+        proposals[i] = prop
+    }
+
+    seq, deps, _ = r.updateAttributes(cmds, seq, deps, replica, instance)
+
+    r.InstanceSpace[r.Id][instance] = &Instance{
+		cmds,
+        ballot,
+        epaxosproto.PREACCEPTED,
+        seq,
+        deps,
+        &LeaderBookkeeping{proposals, 0, 0, true, 0, 0, 0}, 0, 0,
+        bfFromCommands(cmds)}
+
+
+    if seq >= r.maxSeq {
+        r.maxSeq = seq + 1
+    }
+
+    r.recordInstanceMetadata(r.InstanceSpace[r.Id][instance])
+    r.recordCommands(cmds)
+    r.sync()
+
+    r.bcastPreAccept(r.Id, instance, ballot, cmds, seq, deps)
+
+    cpcounter += batchSize
+
+    if r.Id == 0 && DO_CHECKPOINTING && cpcounter >= CHECKPOINT_PERIOD {
+        cpcounter = 0
+
+        //Propose a checkpoint command to act like a barrier.
+        //This allows replicas to discard their dependency hashtables.
+        r.crtInstance[r.Id]++
+        instance++
+
+        r.maxSeq++
+        for q := 0; q < r.N; q++ {
+            deps[q] = r.crtInstance[q] - 1
+        }
+
+        r.InstanceSpace[r.Id][instance] = &Instance{
+            cpMarker,
+            0,
+            epaxosproto.PREACCEPTED,
+            r.maxSeq,
+            deps,
+            &LeaderBookkeeping{nil, 0, 0, true, 0, 0, 0},
+            0,
+            0,
+            nil}
+
+        r.latestCPReplica = r.Id
+        r.latestCPInstance = instance
+
+        //discard dependency hashtables
+        r.clearHashtables()
+
+        r.recordInstanceMetadata(r.InstanceSpace[r.Id][instance])
+        r.sync()
+
+        r.bcastPreAccept(r.Id, instance, 0, cpMarker, r.maxSeq, deps)
+    }
+}
+
+func (r *Replica) handlePrepare(prepare *epaxosproto.Prepare) {
+    inst := r.InstanceSpace[prepare.Replica][prepare.Instance]
+    var preply *epaxosproto.PrepareReply
+    var nildeps [DS]int32
+
+    if inst == nil {
+        preply = &epaxosproto.PrepareReply{prepare.Replica, prepare.Instance, TRUE, -1, epaxosproto.NONE, state.Command{state.NONE, 0, 0}, -1, nildeps}
+    } else {
+        ok := TRUE
+        if prepare.Ballot < inst.ballot {
+            ok = FALSE
+        }
+        //TODO: add batch support for Prepare messages
+        preply = &epaxosproto.PrepareReply{prepare.Replica, prepare.Instance, ok, inst.ballot, inst.Status, inst.Cmds[0], inst.Seq, inst.Deps}
+    }
+
+    r.replyPrepare(preply, r.PeerWriters[prepare.LeaderId])
+}
+
+func (r *Replica) handlePreAccept(preAccept *epaxosproto.PreAccept) {
+    inst := r.InstanceSpace[preAccept.LeaderId][preAccept.Instance]
+
+    if preAccept.Seq >= r.maxSeq {
+        r.maxSeq = preAccept.Seq + 1
+    }
+
+    if inst != nil && (inst.Status == epaxosproto.COMMITTED || inst.Status == epaxosproto.ACCEPTED) {
+        //reordered handling of commit/accept and pre-accept
+        if inst.Cmds == nil {
+            r.InstanceSpace[preAccept.LeaderId][preAccept.Instance].Cmds = preAccept.Command
+            r.InstanceSpace[preAccept.LeaderId][preAccept.Instance].bfilter = bfFromCommands(preAccept.Command)
+        }
+        r.recordCommands(preAccept.Command)
+        r.sync()
+        return
+    }
+
+    if preAccept.Instance >= r.crtInstance[preAccept.Replica] {
+        r.crtInstance[preAccept.Replica] = preAccept.Instance + 1
+    }
+
+    //update attributes for command
+    seq, deps, changed := r.updateAttributes(preAccept.Command, preAccept.Seq, preAccept.Deps, preAccept.Replica, preAccept.Instance)
+
+    if inst != nil {
+        if preAccept.Ballot < inst.ballot {
+            r.replyPreAccept(&epaxosproto.PreAcceptReply{preAccept.Replica, preAccept.Instance, FALSE, inst.ballot, inst.Seq, inst.Deps},
+                             r.PeerWriters[preAccept.LeaderId])
+            return
+        }
+        if inst.lb != nil {
+            //try command in a different instance
+            //r.proposeChan <- inst.lb.clientProposal
+        }
+    }
+
+    status := epaxosproto.PREACCEPTED_EQ
+    if changed {
+        status = epaxosproto.PREACCEPTED
+    }
+
+    r.InstanceSpace[preAccept.Replica][preAccept.Instance] = &Instance{
+		preAccept.Command,
+        preAccept.Ballot,
+        status,
+        seq,
+        deps,
+        nil, 0, 0,
+        bfFromCommands(preAccept.Command)}
+
+    r.recordInstanceMetadata(r.InstanceSpace[preAccept.Replica][preAccept.Instance])
+    r.recordCommands(preAccept.Command)
+    r.sync()
+
+
+    if len(preAccept.Command) == 0 {
+        //checkpoint
+        //update latest checkpoint info
+        r.latestCPReplica = preAccept.Replica
+        r.latestCPInstance = preAccept.Instance
+
+        //discard dependency hashtables
+        r.clearHashtables()
+    }
+
+
+    if changed || preAccept.Replica != preAccept.LeaderId {
+        r.replyPreAccept(&epaxosproto.PreAcceptReply{preAccept.Replica, preAccept.Instance, TRUE, preAccept.Ballot, seq, deps},
+                         r.PeerWriters[preAccept.LeaderId])
+    } else {
+        var pok epaxosproto.PreAcceptOK
+        r.PeerWriters[preAccept.LeaderId].WriteByte(epaxosproto.PREACCEPT_OK)
+        pok.Instance = preAccept.Instance
+        (&pok).Marshal(r.PeerWriters[preAccept.LeaderId])
+        r.PeerWriters[preAccept.LeaderId].Flush()
+    }
+    dlog.Printf("I've replied to the PreAccept\n")
+}
+
+func (r *Replica) handleAccept(accept *epaxosproto.Accept) {
+    inst := r.InstanceSpace[accept.LeaderId][accept.Instance]
+
+    if accept.Seq >= r.maxSeq {
+        r.maxSeq = accept.Seq + 1
+    }
+
+    if inst != nil && (inst.Status == epaxosproto.COMMITTED || inst.Status == epaxosproto.EXECUTED) {
+        return
+    }
+
+    if accept.Instance >= r.crtInstance[accept.LeaderId] {
+        r.crtInstance[accept.LeaderId] = accept.Instance + 1
+    }
+
+    if inst != nil {
+        if accept.Ballot < inst.ballot {
+            r.replyAccept(&epaxosproto.AcceptReply{accept.Replica, accept.Instance, FALSE, inst.ballot},
+                          r.PeerWriters[accept.LeaderId])
+            return
+        }
+        if inst.lb != nil {
+            //try command in a different instance
+            //r.proposeChan <- inst.lb.clientProposal
+        }
+        inst.Status = epaxosproto.ACCEPTED
+        inst.Seq = accept.Seq
+        inst.Deps = accept.Deps
+    } else {
+        r.InstanceSpace[accept.LeaderId][accept.Instance] = &Instance{
+			nil,
+            accept.Ballot,
+            epaxosproto.ACCEPTED,
+            accept.Seq,
+            accept.Deps,
+            nil, 0, 0, nil}
+
+        if accept.Count == 0 {
+            //checkpoint
+            //update latest checkpoint info
+            r.latestCPReplica = accept.Replica
+            r.latestCPInstance = accept.Instance
+
+            //discard dependency hashtables
+            r.clearHashtables()
+        }
+    }
+
+    r.recordInstanceMetadata(r.InstanceSpace[accept.Replica][accept.Instance])
+    r.sync()
+
+    r.replyAccept(&epaxosproto.AcceptReply{accept.Replica, accept.Instance, TRUE, accept.Ballot},
+                  r.PeerWriters[accept.LeaderId])
+}
+
+func (r *Replica) handleCommit(commit *epaxosproto.Commit) {
+    inst := r.InstanceSpace[commit.Replica][commit.Instance]
+
+    if commit.Seq >= r.maxSeq {
+        r.maxSeq = commit.Seq + 1
+    }
+
+    if commit.Instance >= r.crtInstance[commit.Replica] {
+        r.crtInstance[commit.Replica] = commit.Instance + 1
+    }
+
+    if inst != nil {
+        if inst.lb != nil {
+            //try command in a different instance
+            //r.proposeChan <- inst.lb.clientProposal
+        }
+        inst.Seq = commit.Seq
+        inst.Deps = commit.Deps
+        inst.Status = epaxosproto.COMMITTED
+    } else {
+        r.InstanceSpace[commit.Replica][int(commit.Instance)] = &Instance{
+			commit.Command,
+            0,
+            epaxosproto.COMMITTED,
+            commit.Seq,
+            commit.Deps,
+            nil,
+            0,
+            0,
+            bfFromCommands(commit.Command)}
+
+        if len(commit.Command) == 0 {
+            //checkpoint
+            //update latest checkpoint info
+            r.latestCPReplica = commit.Replica
+            r.latestCPInstance = commit.Instance
+
+            //discard dependency hashtables
+            r.clearHashtables()
+        }
+    }
+
+    r.recordInstanceMetadata(r.InstanceSpace[commit.Replica][commit.Instance])
+    r.recordCommands(commit.Command)
+}
+
+func (r *Replica) handleCommitShort(commit *epaxosproto.CommitShort) {
+	inst := r.InstanceSpace[commit.Replica][commit.Instance]
+
+    if commit.Instance >= r.crtInstance[commit.Replica] {
+        r.crtInstance[commit.Replica] = commit.Instance + 1
+    }
+
+    if inst != nil {
+        if inst.lb != nil {
+            //try command in a different instance
+            //r.proposeChan <- inst.lb.clientProposal
+        }
+        inst.Seq = commit.Seq
+        inst.Deps = commit.Deps
+        inst.Status = epaxosproto.COMMITTED
+    } else {
+        r.InstanceSpace[commit.Replica][commit.Instance] = &Instance{
+			nil,
+            0,
+            epaxosproto.COMMITTED,
+            commit.Seq,
+            commit.Deps,
+            nil, 0, 0, nil}
+
+        if commit.Count == 0 {
+            //checkpoint
+            //update latest checkpoint info
+            r.latestCPReplica = commit.Replica
+            r.latestCPInstance = commit.Instance
+
+            //discard dependency hashtables
+            r.clearHashtables()
+        }
+    }
+
+    r.recordInstanceMetadata(r.InstanceSpace[commit.Replica][commit.Instance])
+}
+
+func (r *Replica) handlePrepareReply(preply *epaxosproto.PrepareReply) {
+    //TODO: batching support in Prepare / PrepareReply messages
+}
+
+func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
+    dlog.Printf("Handling PreAccept reply\n")
+    inst := r.InstanceSpace[pareply.Replica][pareply.Instance]
+
+    if inst.Status != epaxosproto.PREACCEPTED {
+        // we've moved on, this is a delayed reply
+        return
+    }
+
+    if pareply.OK == FALSE {
+        // TODO: there is probably another active leader
+        inst.lb.nacks++
+        if pareply.Ballot > inst.lb.maxRecvBallot {
+            inst.lb.maxRecvBallot = pareply.Ballot
+        }
+        if inst.lb.nacks >= r.N >> 1 {
+            // TODO
+        }
+        return
+    }
+
+    inst.lb.preAcceptOKs++
+
+    var equal bool
+    inst.Seq, inst.Deps, equal = r.mergeAttributes(inst.Seq, inst.Deps, pareply.Seq, pareply.Deps)
+    if (r.N <= 3 && !r.Thrifty) || inst.lb.preAcceptOKs > 1 {
+        inst.lb.allEqual = inst.lb.allEqual && equal
+        if !equal {
+            conflicted++
+        } else {
+            happy++
+        }
+    }
+
+    if inst.lb.preAcceptOKs >= r.N >> 1  && inst.lb.allEqual {
+        dlog.Printf("Fast path for instance %d.%d\n", pareply.Replica, pareply.Instance)
+		r.InstanceSpace[pareply.Replica][pareply.Instance].Status = epaxosproto.COMMITTED
+        if inst.lb.clientProposals != nil && !r.Dreply {
+            // give clients the all clear
+			for i := 0; i < len(inst.lb.clientProposals); i++ {
+				r.replyPropose(&genericsmrproto.ProposeReply{TRUE, inst.lb.clientProposals[i].ClientId},
+                           inst.lb.clientProposals[i].reply)
+			}
+        }
+
+        r.recordInstanceMetadata(inst)
+        r.sync()//is this necessary here?
+
+        r.bcastCommit(pareply.Replica, pareply.Instance, inst.Cmds, inst.Seq, inst.Deps)
+    } else if !inst.lb.allEqual && inst.lb.preAcceptOKs >= r.N >> 1 {
+        slow++
+        inst.Status = epaxosproto.ACCEPTED
+        r.bcastAccept(pareply.Replica, pareply.Instance, inst.ballot, int32(len(inst.Cmds)), inst.Seq, inst.Deps)
+    }
+    //TODO: take the slow path if messages are slow to arrive
+}
+
+func (r *Replica) handlePreAcceptOK(pareply *epaxosproto.PreAcceptOK) {
+    dlog.Printf("Handling PreAccept reply\n")
+    inst := r.InstanceSpace[r.Id][pareply.Instance]
+
+    if inst.Status != epaxosproto.PREACCEPTED {
+        // we've moved on, this is a delayed reply
+        return
+    }
+
+    inst.lb.preAcceptOKs++
+
+    happy++
+
+    if inst.lb.preAcceptOKs >= r.N >> 1 && inst.lb.allEqual {
+	    r.InstanceSpace[r.Id][pareply.Instance].Status = epaxosproto.COMMITTED
+        if inst.lb.clientProposals != nil && !r.Dreply {
+            // give clients the all clear
+			for i := 0; i < len(inst.lb.clientProposals); i++ {
+				r.replyPropose(&genericsmrproto.ProposeReply{TRUE, inst.lb.clientProposals[i].ClientId},
+                           inst.lb.clientProposals[i].reply)
+			}
+        }
+
+        r.recordInstanceMetadata(inst)
+        r.sync()//is this necessary here?
+
+        r.bcastCommit(r.Id, pareply.Instance, inst.Cmds, inst.Seq, inst.Deps)
+    } else if !inst.lb.allEqual && inst.lb.preAcceptOKs >= r.N >> 1 {
+        weird++
+        inst.Status = epaxosproto.ACCEPTED
+		r.bcastAccept(r.Id, pareply.Instance, inst.ballot, int32(len(inst.Cmds)), inst.Seq, inst.Deps)
+    }
+    //TODO: take the slow path if messages are slow to arrive
+}
+
+
+func (r *Replica) handleAcceptReply(areply *epaxosproto.AcceptReply) {
+    inst := r.InstanceSpace[areply.Replica][areply.Instance]
+
+    if inst.Status != epaxosproto.ACCEPTED {
+        // we've move on, these are delayed replies, so just ignore
+        return
+    }
+
+    if areply.OK == FALSE {
+        // TODO: there is probably another active leader
+        inst.lb.nacks++
+        if areply.Ballot > inst.lb.maxRecvBallot {
+            inst.lb.maxRecvBallot = areply.Ballot
+        }
+        if inst.lb.nacks >= r.N >> 1 {
+            // TODO
+        }
+        return
+    }
+
+    inst.lb.acceptOKs++
+
+    if inst.lb.acceptOKs + 1 > r.N >> 1 {
+		r.InstanceSpace[areply.Replica][areply.Instance].Status = epaxosproto.COMMITTED
+        if inst.lb.clientProposals != nil && !r.Dreply {
+            // give clients the all clear
+			for i := 0; i < len(inst.lb.clientProposals); i++ {
+				r.replyPropose(&genericsmrproto.ProposeReply{TRUE, inst.lb.clientProposals[i].ClientId},
+                           inst.lb.clientProposals[i].reply)
+			}
+        }
+
+        r.recordInstanceMetadata(inst)
+        r.sync()//is this necessary here?
+
+        r.bcastCommit(areply.Replica, areply.Instance, inst.Cmds, inst.Seq, inst.Deps)
+    }
+}
+
+func (r *Replica) executeCommands() {
+    for !r.Shutdown {
+        executed := false
+        for q := 0; q < r.N; q++ {
+            inst := int32(0)
+            for inst = r.ExecedUpTo[q] + 1; inst < r.crtInstance[q]; inst++ {
+                if r.InstanceSpace[q][inst] == nil {
+                    //break
+                    continue
+                }
+                //account for batching
+                if r.InstanceSpace[q][inst].Seq == -1 {
+                    continue
+                }
+                if r.InstanceSpace[q][inst].Status == epaxosproto.EXECUTED {
+                    if inst == r.ExecedUpTo[q] + 1 {
+                        r.ExecedUpTo[q] = inst
+                    }
+                    continue
+                }
+                if r.InstanceSpace[q][inst].Status != epaxosproto.COMMITTED {
+                    break
+                }
+                if ok := r.exec.executeCommand(int32(q), inst); ok {
+                    executed = true
+                    if inst == r.ExecedUpTo[q] + 1 {
+                        r.ExecedUpTo[q] = inst
+                    }
+                }
+            }
+        }
+        if !executed {
+            time.Sleep(1000 * 1000)
+        }
+        //log.Println(r.ExecedUpTo, " ", r.crtInstance)
+    }
+}
+

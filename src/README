@@ -1,0 +1,17 @@
+Built for Go version go1.
+
+To build:
+
+    export GOPATH=[...]/git/dpaxos/
+
+    go install master
+    go install server
+    go install client
+
+To run:
+
+    master/master &
+    server/server -port 7070 &
+    server/server -port 7071 &
+    server/server -port 7072 &
+    client/client

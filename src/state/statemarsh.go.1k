@@ -1,0 +1,79 @@
+package state
+
+import (
+    "io"
+    "encoding/binary"
+)
+
+func (t *Command) Marshal(w io.Writer) {
+	var b [1033]byte
+	bs := b[:]
+	b[0] = byte(t.Op)
+	binary.LittleEndian.PutUint64(bs[1:9], uint64(t.K))
+	for i := 0; i < 128; i++ {
+		s := 9 + i * 8
+		e := s + 8
+		binary.LittleEndian.PutUint64(bs[s:e], uint64(t.V[i]))
+	}
+	w.Write(bs)
+}
+
+func (t *Command) Unmarshal(r io.Reader) error {
+	var b [1033]byte
+	bs := b[:]
+	if _, err := io.ReadFull(r, bs); err != nil {
+		return err
+	}
+	t.Op = Operation(b[0])
+	t.K = Key(binary.LittleEndian.Uint64(bs[1:9]))
+	for i := 0; i < 128; i++ {
+		s := 9 + i * 8
+		e := s + 8
+		t.V[i] = int64(binary.LittleEndian.Uint64(bs[s:e]))
+	}
+	return nil
+}
+
+func (t *Key) Marshal(w io.Writer) {
+    var b [8]byte
+	bs := b[:]
+    binary.LittleEndian.PutUint64(bs, uint64(*t))
+    w.Write(bs)
+}
+
+func (t *Value) Marshal(w io.Writer) {
+    var b [1024]byte
+	bs := b[:]
+	for i := 0; i < 128; i++ {
+		s := i * 8
+		e := s + 8
+		binary.LittleEndian.PutUint64(bs[s:e], uint64((*t)[i]))
+	}
+    w.Write(bs)
+}
+
+
+func (t *Key) Unmarshal(r io.Reader) error {
+    var b [8]byte
+	bs := b[:]
+    if _, err := io.ReadFull(r, bs); err != nil {
+		return err
+	}
+	*t = Key(binary.LittleEndian.Uint64(bs))
+    return nil
+}
+
+
+func (t *Value) Unmarshal(r io.Reader) error {
+    var b [1024]byte
+	bs := b[:]
+    if _, err := io.ReadFull(r, bs); err != nil {
+		return err
+	}
+	for i := 0; i < 128; i++ {
+		s := i * 8
+		e := s + 8
+		(*t)[i] = int64(binary.LittleEndian.Uint64(bs[s:e]))
+	}
+    return nil
+}

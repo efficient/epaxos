@@ -1,0 +1,46 @@
+package state
+
+//import "fmt"
+
+type Operation uint8
+
+const (
+    NONE Operation = iota
+    PUT
+    DELETE
+    RLOCK
+    WLOCK
+)
+
+type Value [128]int64
+
+type Key int64
+
+type Command struct {
+    Op Operation
+    K Key
+    V Value
+}
+
+type State struct {
+    Store map[Key]Value
+}
+
+func Conflict(gamma *Command, delta *Command) bool {
+    if gamma.K == delta.K {
+        if gamma.Op == PUT || delta.Op == PUT {
+            return true
+        }
+    }
+    return false
+}
+
+func (c *Command) Execute(st *State) {
+    //fmt.Printf("Executing (%d, %d)\n", c.K, c.V)
+    switch (c.Op) {
+    case PUT:
+        st.Store[c.K] = c.V
+        break
+    }
+}
+
