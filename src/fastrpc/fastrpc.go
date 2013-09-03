@@ -1,12 +1,11 @@
 package fastrpc
 
 import (
-    "io"
+	"io"
 )
 
 type Serializable interface {
-    Marshal(io.Writer)
-    Unmarshal(io.Reader) error
-    New() Serializable
+	Marshal(io.Writer)
+	Unmarshal(io.Reader) error
+	New() Serializable
 }
-

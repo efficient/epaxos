@@ -1,10 +1,10 @@
 package gpaxosproto
 
 import (
-	"io"
-	"sync"
 	"bufio"
 	"encoding/binary"
+	"io"
+	"sync"
 )
 
 type byteReader interface {
@@ -17,8 +17,8 @@ func (t *M_1a) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type M_1aCache struct {
-	mu	sync.Mutex
-	cache	[]*M_1a
+	mu    sync.Mutex
+	cache []*M_1a
 }
 
 func NewM_1aCache() *M_1aCache {
@@ -81,8 +81,8 @@ func (t *M_1b) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type M_1bCache struct {
-	mu	sync.Mutex
-	cache	[]*M_1b
+	mu    sync.Mutex
+	cache []*M_1b
 }
 
 func NewM_1bCache() *M_1bCache {
@@ -174,8 +174,8 @@ func (t *Prepare) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type PrepareCache struct {
-	mu	sync.Mutex
-	cache	[]*Prepare
+	mu    sync.Mutex
+	cache []*Prepare
 }
 
 func NewPrepareCache() *PrepareCache {
@@ -242,8 +242,8 @@ func (t *M_2a) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type M_2aCache struct {
-	mu	sync.Mutex
-	cache	[]*M_2a
+	mu    sync.Mutex
+	cache []*M_2a
 }
 
 func NewM_2aCache() *M_2aCache {
@@ -335,8 +335,8 @@ func (t *M_2b) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type M_2bCache struct {
-	mu	sync.Mutex
-	cache	[]*M_2b
+	mu    sync.Mutex
+	cache []*M_2b
 }
 
 func NewM_2bCache() *M_2bCache {
@@ -453,8 +453,8 @@ func (t *Commit) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type CommitCache struct {
-	mu	sync.Mutex
-	cache	[]*Commit
+	mu    sync.Mutex
+	cache []*Commit
 }
 
 func NewCommitCache() *CommitCache {
@@ -528,8 +528,8 @@ func (t *PrepareReply) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type PrepareReplyCache struct {
-	mu	sync.Mutex
-	cache	[]*PrepareReply
+	mu    sync.Mutex
+	cache []*PrepareReply
 }
 
 func NewPrepareReplyCache() *PrepareReplyCache {

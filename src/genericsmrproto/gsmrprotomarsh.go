@@ -10,8 +10,8 @@ func (t *Propose) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type ProposeCache struct {
-	mu	sync.Mutex
-	cache	[]*Propose
+	mu    sync.Mutex
+	cache []*Propose
 }
 
 func NewProposeCache() *ProposeCache {
@@ -84,8 +84,8 @@ func (t *BeaconReply) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type BeaconReplyCache struct {
-	mu	sync.Mutex
-	cache	[]*BeaconReply
+	mu    sync.Mutex
+	cache []*BeaconReply
 }
 
 func NewBeaconReplyCache() *BeaconReplyCache {
@@ -144,8 +144,8 @@ func (t *PingArgs) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type PingArgsCache struct {
-	mu	sync.Mutex
-	cache	[]*PingArgs
+	mu    sync.Mutex
+	cache []*PingArgs
 }
 
 func NewPingArgsCache() *PingArgsCache {
@@ -196,8 +196,8 @@ func (t *BeTheLeaderArgs) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type BeTheLeaderArgsCache struct {
-	mu	sync.Mutex
-	cache	[]*BeTheLeaderArgs
+	mu    sync.Mutex
+	cache []*BeTheLeaderArgs
 }
 
 func NewBeTheLeaderArgsCache() *BeTheLeaderArgsCache {
@@ -236,8 +236,8 @@ func (t *ProposeAndRead) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type ProposeAndReadCache struct {
-	mu	sync.Mutex
-	cache	[]*ProposeAndRead
+	mu    sync.Mutex
+	cache []*ProposeAndRead
 }
 
 func NewProposeAndReadCache() *ProposeAndReadCache {
@@ -296,8 +296,8 @@ func (t *Read) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type ReadCache struct {
-	mu	sync.Mutex
-	cache	[]*Read
+	mu    sync.Mutex
+	cache []*Read
 }
 
 func NewReadCache() *ReadCache {
@@ -354,8 +354,8 @@ func (t *PingReply) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type PingReplyCache struct {
-	mu	sync.Mutex
-	cache	[]*PingReply
+	mu    sync.Mutex
+	cache []*PingReply
 }
 
 func NewPingReplyCache() *PingReplyCache {
@@ -394,8 +394,8 @@ func (t *Beacon) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type BeaconCache struct {
-	mu	sync.Mutex
-	cache	[]*Beacon
+	mu    sync.Mutex
+	cache []*Beacon
 }
 
 func NewBeaconCache() *BeaconCache {
@@ -454,8 +454,8 @@ func (t *ReadReply) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type ReadReplyCache struct {
-	mu	sync.Mutex
-	cache	[]*ReadReply
+	mu    sync.Mutex
+	cache []*ReadReply
 }
 
 func NewReadReplyCache() *ReadReplyCache {
@@ -512,8 +512,8 @@ func (t *ProposeAndReadReply) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type ProposeAndReadReplyCache struct {
-	mu	sync.Mutex
-	cache	[]*ProposeAndReadReply
+	mu    sync.Mutex
+	cache []*ProposeAndReadReply
 }
 
 func NewProposeAndReadReplyCache() *ProposeAndReadReplyCache {
@@ -572,8 +572,8 @@ func (t *ProposeReply) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type ProposeReplyCache struct {
-	mu	sync.Mutex
-	cache	[]*ProposeReply
+	mu    sync.Mutex
+	cache []*ProposeReply
 }
 
 func NewProposeReplyCache() *ProposeReplyCache {
@@ -630,8 +630,8 @@ func (t *BeTheLeaderReply) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type BeTheLeaderReplyCache struct {
-	mu	sync.Mutex
-	cache	[]*BeTheLeaderReply
+	mu    sync.Mutex
+	cache []*BeTheLeaderReply
 }
 
 func NewBeTheLeaderReplyCache() *BeTheLeaderReplyCache {
@@ -670,8 +670,8 @@ func (t *ProposeReplyTS) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type ProposeReplyTSCache struct {
-	mu	sync.Mutex
-	cache	[]*ProposeReplyTS
+	mu    sync.Mutex
+	cache []*ProposeReplyTS
 }
 
 func NewProposeReplyTSCache() *ProposeReplyTSCache {

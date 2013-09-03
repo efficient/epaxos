@@ -1,9 +1,9 @@
 package menciusproto
 
 import (
+	"fastrpc"
 	"io"
 	"sync"
-	"fastrpc"
 )
 
 func (t *Skip) New() fastrpc.Serializable {
@@ -14,8 +14,8 @@ func (t *Skip) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type SkipCache struct {
-	mu	sync.Mutex
-	cache	[]*Skip
+	mu    sync.Mutex
+	cache []*Skip
 }
 
 func NewSkipCache() *SkipCache {
@@ -85,8 +85,8 @@ func (t *Prepare) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type PrepareCache struct {
-	mu	sync.Mutex
-	cache	[]*Prepare
+	mu    sync.Mutex
+	cache []*Prepare
 }
 
 func NewPrepareCache() *PrepareCache {
@@ -156,8 +156,8 @@ func (t *PrepareReply) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type PrepareReplyCache struct {
-	mu	sync.Mutex
-	cache	[]*PrepareReply
+	mu    sync.Mutex
+	cache []*PrepareReply
 }
 
 func NewPrepareReplyCache() *PrepareReplyCache {
@@ -233,8 +233,8 @@ func (t *Accept) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type AcceptCache struct {
-	mu	sync.Mutex
-	cache	[]*Accept
+	mu    sync.Mutex
+	cache []*Accept
 }
 
 func NewAcceptCache() *AcceptCache {
@@ -314,8 +314,8 @@ func (t *AcceptReply) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type AcceptReplyCache struct {
-	mu	sync.Mutex
-	cache	[]*AcceptReply
+	mu    sync.Mutex
+	cache []*AcceptReply
 }
 
 func NewAcceptReplyCache() *AcceptReplyCache {
@@ -393,8 +393,8 @@ func (t *Commit) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type CommitCache struct {
-	mu	sync.Mutex
-	cache	[]*Commit
+	mu    sync.Mutex
+	cache []*Commit
 }
 
 func NewCommitCache() *CommitCache {

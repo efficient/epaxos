@@ -1,19 +1,19 @@
 package main
 
 import (
-    "log"
-//	"dlog"
-    "net"
-	"net/rpc"
+	"log"
+	//	"dlog"
+	"bufio"
 	"flag"
 	"fmt"
-    "genericsmrproto"
-    "state"
-    "runtime"
-    "masterproto"
-    "math/rand"
-    "time"
-    "bufio"
+	"genericsmrproto"
+	"masterproto"
+	"math/rand"
+	"net"
+	"net/rpc"
+	"runtime"
+	"state"
+	"time"
 )
 
 var masterAddr *string = flag.String("maddr", "", "Master address. Defaults to localhost")
@@ -35,147 +35,143 @@ var rarray []int
 var rsp []bool
 
 func main() {
-    flag.Parse()
+	flag.Parse()
 
-    runtime.GOMAXPROCS(*procs)
+	runtime.GOMAXPROCS(*procs)
 
-    if *conflicts > 100 {
-        log.Fatalf("Conflicts percentage must be between 0 and 100.\n")
-    }
+	if *conflicts > 100 {
+		log.Fatalf("Conflicts percentage must be between 0 and 100.\n")
+	}
 
-    master, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", *masterAddr, *masterPort))
-    if err != nil {
-        log.Fatalf("Error connecting to master\n")
-    }
+	master, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", *masterAddr, *masterPort))
+	if err != nil {
+		log.Fatalf("Error connecting to master\n")
+	}
 
-    rlReply := new(masterproto.GetReplicaListReply)
-    err = master.Call("Master.GetReplicaList", new(masterproto.GetReplicaListArgs), rlReply)
-    if err != nil {
-        log.Fatalf("Error making the GetReplicaList RPC")
-    }
+	rlReply := new(masterproto.GetReplicaListReply)
+	err = master.Call("Master.GetReplicaList", new(masterproto.GetReplicaListArgs), rlReply)
+	if err != nil {
+		log.Fatalf("Error making the GetReplicaList RPC")
+	}
 
-    leader := 0
-    if *noLeader == false && *forceLeader < 0 {
-        reply := new(masterproto.GetLeaderReply)
-        if err = master.Call("Master.GetLeader", new(masterproto.GetLeaderArgs), reply); err != nil {
-            log.Fatalf("Error making the GetLeader RPC\n")
-        }
-        leader = reply.LeaderId
-        //log.Printf("The leader is replica %d\n", leader)
-    } else if *forceLeader > 0 {
-        leader = *forceLeader
-    }
+	leader := 0
+	if *noLeader == false && *forceLeader < 0 {
+		reply := new(masterproto.GetLeaderReply)
+		if err = master.Call("Master.GetLeader", new(masterproto.GetLeaderArgs), reply); err != nil {
+			log.Fatalf("Error making the GetLeader RPC\n")
+		}
+		leader = reply.LeaderId
+		//log.Printf("The leader is replica %d\n", leader)
+	} else if *forceLeader > 0 {
+		leader = *forceLeader
+	}
 
-    done := make(chan bool, *T)
+	done := make(chan bool, *T)
 
-    readings := make(chan float64, 2 * *reqsNb)
+	readings := make(chan float64, 2**reqsNb)
 
-    go printer(readings, done)
+	go printer(readings, done)
 
-    for i := 0; i < *T; i++ {
-        go simulatedClient(rlReply, leader, readings, done)
-    }
+	for i := 0; i < *T; i++ {
+		go simulatedClient(rlReply, leader, readings, done)
+	}
 
-    for i := 0; i < *T + 1; i++ {
-        <-done
-    }
-    master.Close()
+	for i := 0; i < *T+1; i++ {
+		<-done
+	}
+	master.Close()
 }
 
 func simulatedClient(rlReply *masterproto.GetReplicaListReply, leader int, readings chan float64, done chan bool) {
-    N := len(rlReply.ReplicaList)
-    servers := make([]net.Conn, N)
-    readers := make([]*bufio.Reader, N)
-    writers := make([]*bufio.Writer, N)
+	N := len(rlReply.ReplicaList)
+	servers := make([]net.Conn, N)
+	readers := make([]*bufio.Reader, N)
+	writers := make([]*bufio.Writer, N)
 
-    rarray := make([]int, *reqsNb)
-    karray := make([]int64, *reqsNb)
-    perReplicaCount := make([]int, N)
-    M := N
-    if *barOne {
-        M = N - 1
-    }
-    randObj := rand.New(rand.NewSource(42))
-    zipf := rand.NewZipf(randObj, *s, *v, uint64(*reqsNb))
-    for i := 0; i < len(rarray); i++ {
-        r := rand.Intn(M)
+	rarray := make([]int, *reqsNb)
+	karray := make([]int64, *reqsNb)
+	perReplicaCount := make([]int, N)
+	M := N
+	if *barOne {
+		M = N - 1
+	}
+	randObj := rand.New(rand.NewSource(42))
+	zipf := rand.NewZipf(randObj, *s, *v, uint64(*reqsNb))
+	for i := 0; i < len(rarray); i++ {
+		r := rand.Intn(M)
 
-        rarray[i] = r
-        perReplicaCount[r]++
+		rarray[i] = r
+		perReplicaCount[r]++
 
-        if *conflicts >= 0 {
-            r = rand.Intn(100)
-            if r < *conflicts {
-                karray[i] = 42
-            } else {
-                karray[i] = int64(*startRange + 43 + i)
-            }
-        } else {
-            karray[i] = int64(zipf.Uint64())
-        }
-    }
+		if *conflicts >= 0 {
+			r = rand.Intn(100)
+			if r < *conflicts {
+				karray[i] = 42
+			} else {
+				karray[i] = int64(*startRange + 43 + i)
+			}
+		} else {
+			karray[i] = int64(zipf.Uint64())
+		}
+	}
 
-    for i := 0; i < N; i++ {
-        var err error
-        servers[i], err = net.Dial("tcp", rlReply.ReplicaList[i])
-        if err != nil {
-            log.Printf("Error connecting to replica %d\n", i)
-        }
-        readers[i] = bufio.NewReader(servers[i])
-        writers[i] = bufio.NewWriter(servers[i])
-    }
+	for i := 0; i < N; i++ {
+		var err error
+		servers[i], err = net.Dial("tcp", rlReply.ReplicaList[i])
+		if err != nil {
+			log.Printf("Error connecting to replica %d\n", i)
+		}
+		readers[i] = bufio.NewReader(servers[i])
+		writers[i] = bufio.NewWriter(servers[i])
+	}
 
-    var id int32 = 0
-    args := genericsmrproto.Propose{id, state.Command{state.PUT, 0, 0}}
-    var reply genericsmrproto.ProposeReply
+	var id int32 = 0
+	args := genericsmrproto.Propose{id, state.Command{state.PUT, 0, 0}}
+	var reply genericsmrproto.ProposeReply
 
-    n := *reqsNb
+	n := *reqsNb
 
-    for i := 0; i < n; i++ {
-        if *noLeader {
-            leader = rarray[i]
-        }
-        args.ClientId = id
-        args.Command.K = state.Key(karray[i])
-        writers[leader].WriteByte(genericsmrproto.PROPOSE)
+	for i := 0; i < n; i++ {
+		if *noLeader {
+			leader = rarray[i]
+		}
+		args.ClientId = id
+		args.Command.K = state.Key(karray[i])
+		writers[leader].WriteByte(genericsmrproto.PROPOSE)
 
-        before := time.Now()
+		before := time.Now()
 
-        args.Marshal(writers[leader])
-        writers[leader].Flush()
-        if err := reply.Unmarshal(readers[leader]); err != nil || reply.OK == 0 {
-            fmt.Println("Error when reading:", err)
-            continue
-        }
+		args.Marshal(writers[leader])
+		writers[leader].Flush()
+		if err := reply.Unmarshal(readers[leader]); err != nil || reply.OK == 0 {
+			fmt.Println("Error when reading:", err)
+			continue
+		}
 
-        after := time.Now()
+		after := time.Now()
 
-        id++
+		id++
 
-        readings <- (after.Sub(before)).Seconds() * 1000
+		readings <- (after.Sub(before)).Seconds() * 1000
 
-        if *sleep > 0 {
-            time.Sleep(100 * 1000 * 1000)
-        }
-    }
+		if *sleep > 0 {
+			time.Sleep(100 * 1000 * 1000)
+		}
+	}
 
-    for _, client := range servers {
-        if client != nil {
-            client.Close()
-        }
-    }
-    done <- true
+	for _, client := range servers {
+		if client != nil {
+			client.Close()
+		}
+	}
+	done <- true
 }
 
 func printer(readings chan float64, done chan bool) {
-    n := *T * *reqsNb
-    for i := 0; i < n; i++ {
-        lat := <-readings
-        fmt.Printf("%v\n", lat)
-    }
-    done <- true
+	n := *T * *reqsNb
+	for i := 0; i < n; i++ {
+		lat := <-readings
+		fmt.Printf("%v\n", lat)
+	}
+	done <- true
 }
-
-
-
-

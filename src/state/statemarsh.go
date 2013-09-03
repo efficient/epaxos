@@ -1,8 +1,8 @@
 package state
 
 import (
-    "io"
-    "encoding/binary"
+	"encoding/binary"
+	"io"
 )
 
 func (t *Command) Marshal(w io.Writer) {
@@ -39,37 +39,35 @@ func (t *Command) Unmarshal(r io.Reader) error {
 }
 
 func (t *Key) Marshal(w io.Writer) {
-    var b [8]byte
+	var b [8]byte
 	bs := b[:8]
-    binary.LittleEndian.PutUint64(bs, uint64(*t))
-    w.Write(bs)
+	binary.LittleEndian.PutUint64(bs, uint64(*t))
+	w.Write(bs)
 }
 
 func (t *Value) Marshal(w io.Writer) {
-    var b [8]byte
+	var b [8]byte
 	bs := b[:8]
-    binary.LittleEndian.PutUint64(bs, uint64(*t))
-    w.Write(bs)
+	binary.LittleEndian.PutUint64(bs, uint64(*t))
+	w.Write(bs)
 }
 
-
 func (t *Key) Unmarshal(r io.Reader) error {
-    var b [8]byte
+	var b [8]byte
 	bs := b[:8]
-    if _, err := io.ReadFull(r, bs); err != nil {
+	if _, err := io.ReadFull(r, bs); err != nil {
 		return err
 	}
 	*t = Key(binary.LittleEndian.Uint64(bs))
-    return nil
+	return nil
 }
 
-
 func (t *Value) Unmarshal(r io.Reader) error {
-    var b [8]byte
+	var b [8]byte
 	bs := b[:8]
-    if _, err := io.ReadFull(r, bs); err != nil {
+	if _, err := io.ReadFull(r, bs); err != nil {
 		return err
 	}
 	*t = Value(binary.LittleEndian.Uint64(bs))
-    return nil
+	return nil
 }
