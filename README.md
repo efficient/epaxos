@@ -22,6 +22,11 @@ the common case or after at most two rounds in any case.
 
 * Generalized Paxos
 
+
+The struct marshaling and unmarshaling code was generated automatically using
+the tool available at: https://code.google.com/p/gobin-codegen/
+
+
 AUTHORS:
 
 Iulian Moraru, David G. Andersen -- Carnegie Mellon University
