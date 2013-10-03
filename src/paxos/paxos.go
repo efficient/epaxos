@@ -716,8 +716,8 @@ func (r *Replica) executeCommands() {
     for !r.Shutdown {
         executed := false
 
-        for i < r.crtInstance {
-            if r.instanceSpace[i] != nil && r.instanceSpace[i].status == COMMITTED &&  r.instanceSpace[i].cmds != nil {
+        for i <= r.committedUpTo {
+            if r.instanceSpace[i].cmds != nil {
                 inst := r.instanceSpace[i]
                 for j := 0; j < len(inst.cmds); j++ {
                     val := inst.cmds[j].Execute(r.State)
