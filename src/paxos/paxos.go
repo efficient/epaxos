@@ -40,6 +40,7 @@ type Replica struct {
     Shutdown bool
     counter int
     flush bool
+    committedUpTo int32
 }
 
 type InstanceStatus int
@@ -81,7 +82,8 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply b
                   -1,
                   false,
                   0,
-                  true}
+                  true,
+                  -1}
 
     r.Durable = durable
 
@@ -295,6 +297,13 @@ func (r *Replica) run() {
 
 func (r *Replica) makeUniqueBallot(ballot int32) int32 {
     return (ballot << 4) | r.Id
+}
+
+func (r *Replica) updateCommittedUpTo() {
+    for r.instanceSpace[r.committedUpTo + 1] != nil &&
+        r.instanceSpace[r.committedUpTo + 1].status == COMMITTED {
+        r.committedUpTo++
+    }
 }
 
 func (r *Replica) bcastPrepare(instance int32, ballot int32, toInfinity bool) {
@@ -571,6 +580,8 @@ func (r *Replica) handleCommit(commit *paxosproto.Commit) {
         }
     }
 
+    r.updateCommittedUpTo()
+
     r.recordInstanceMetadata(r.instanceSpace[commit.Instance])
     r.recordCommands(commit.Command)
 }
@@ -595,6 +606,9 @@ func (r *Replica) handleCommitShort(commit *paxosproto.CommitShort) {
             inst.lb.clientProposals = nil
         }
     }
+
+    r.updateCommittedUpTo()
+
     r.recordInstanceMetadata(r.instanceSpace[commit.Instance])
 }
 
@@ -680,6 +694,8 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 
             r.recordInstanceMetadata(r.instanceSpace[areply.Instance])
             r.sync()//is this necessary?
+
+            r.updateCommittedUpTo()
 
             r.bcastCommit(areply.Instance, inst.ballot, inst.cmds)
         }
