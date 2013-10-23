@@ -306,7 +306,7 @@ func (r *Replica) run() {
 
         select {
 
-    	case propose := <-onOffProposeChan:
+        case propose := <-onOffProposeChan:
             //got a Propose from a client
             dlog.Printf("Proposal with op %d\n", propose.Command.Op)
             r.handlePropose(propose)
