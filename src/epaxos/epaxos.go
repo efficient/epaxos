@@ -310,9 +310,9 @@ func (r *Replica) run() {
             //got a Propose from a client
             dlog.Printf("Proposal with op %d\n", propose.Command.Op)
             r.handlePropose(propose)
-		    //deactivate new proposals channel to prioritize the handling of other protocol messages,
-		    //and to allow commands to accumulate for batching
-		    onOffProposeChan = nil
+            //deactivate new proposals channel to prioritize the handling of other protocol messages,
+            //and to allow commands to accumulate for batching
+            onOffProposeChan = nil
             break
 
         case <-fastClockChan:

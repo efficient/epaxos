@@ -186,17 +186,15 @@ func (r *Replica) run() {
     clockChan = make(chan bool, 1)
     go r.clock()
 
-	var onOffProposeChan chan *genericsmr.Propose
-
-	onOffProposeChan = r.ProposeChan
+    onOffProposeChan := r.ProposeChan
 
     for !r.Shutdown {
 
         select {	
 
         case <-clockChan:
-        	//activate the new proposals channel
-        	onOffProposeChan = r.ProposeChan
+            //activate the new proposals channel
+            onOffProposeChan = r.ProposeChan
             break
 
         case propose := <-onOffProposeChan:
@@ -204,7 +202,7 @@ func (r *Replica) run() {
             dlog.Printf("Proposal with op %d\n", propose.Command.Op)
             r.handlePropose(propose)
             //deactivate the new proposals channel to prioritize the handling of protocol messages
-			onOffProposeChan = nil
+            onOffProposeChan = nil
             break
 
         case prepareS := <-r.prepareChan:
