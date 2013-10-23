@@ -186,14 +186,25 @@ func (r *Replica) run() {
     clockChan = make(chan bool, 1)
     go r.clock()
 
-	clockRang := false
+	var onOffProposeChan chan *genericsmr.Propose
+
+	onOffProposeChan = r.ProposeChan
 
     for !r.Shutdown {
 
-        select {
+        select {	
 
         case <-clockChan:
-            clockRang = true
+        	//activate the new proposals channel
+        	onOffProposeChan = r.ProposeChan
+            break
+
+        case propose := <-onOffProposeChan:
+            //got a Propose from a client
+            dlog.Printf("Proposal with op %d\n", propose.Command.Op)
+            r.handlePropose(propose)
+            //deactivate the new proposals channel to prioritize the handling of protocol messages
+			onOffProposeChan = nil
             break
 
         case prepareS := <-r.prepareChan:
@@ -237,60 +248,6 @@ func (r *Replica) run() {
             dlog.Printf("Received AcceptReply for instance %d\n", acceptReply.Instance)
             r.handleAcceptReply(acceptReply)
             break
-        }
-
-        if clockRang {
-            select {
-
-            case propose := <-r.ProposeChan:
-                //got a Propose from a client
-                dlog.Printf("Proposal with op %d\n", propose.Command.Op)
-                r.handlePropose(propose)
-				clockRang = false
-                break
-
-            case prepareS := <-r.prepareChan:
-                prepare := prepareS.(*paxosproto.Prepare)
-                //got a Prepare message
-                dlog.Printf("Received Prepare from replica %d, for instance %d\n", prepare.LeaderId, prepare.Instance)
-                r.handlePrepare(prepare)
-                break
-
-            case acceptS := <-r.acceptChan:
-                accept := acceptS.(*paxosproto.Accept)
-                //got an Accept message
-                dlog.Printf("Received Accept from replica %d, for instance %d\n", accept.LeaderId, accept.Instance)
-                r.handleAccept(accept)
-                break
-
-            case commitS := <-r.commitChan:
-                commit := commitS.(*paxosproto.Commit)
-                //got a Commit message
-                dlog.Printf("Received Commit from replica %d, for instance %d\n", commit.LeaderId, commit.Instance)
-                r.handleCommit(commit)
-                break
-
-            case commitS := <-r.commitShortChan:
-                commit := commitS.(*paxosproto.CommitShort)
-                //got a Commit message
-                dlog.Printf("Received Commit from replica %d, for instance %d\n", commit.LeaderId, commit.Instance)
-                r.handleCommitShort(commit)
-                break
-
-            case prepareReplyS := <-r.prepareReplyChan:
-                prepareReply := prepareReplyS.(*paxosproto.PrepareReply)
-                //got a Prepare reply
-                dlog.Printf("Received PrepareReply for instance %d\n", prepareReply.Instance)
-                r.handlePrepareReply(prepareReply)
-                break
-
-            case acceptReplyS := <-r.acceptReplyChan:
-                acceptReply := acceptReplyS.(*paxosproto.AcceptReply)
-                //got an Accept reply
-                dlog.Printf("Received AcceptReply for instance %d\n", acceptReply.Instance)
-                r.handleAcceptReply(acceptReply)
-                break
-            }
         }
     }
 }

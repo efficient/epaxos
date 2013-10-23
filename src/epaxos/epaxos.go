@@ -300,19 +300,24 @@ func (r *Replica) run() {
         go r.stopAdapting()
     }
 
+    onOffProposeChan := r.ProposeChan
+
     for !r.Shutdown {
-
-        handleNewProposals := true
-
-        // Enabled when batching for 5ms
-        if MAX_BATCH > 100 {
-            handleNewProposals = false
-        }
 
         select {
 
+    	case propose := <-onOffProposeChan:
+            //got a Propose from a client
+            dlog.Printf("Proposal with op %d\n", propose.Command.Op)
+            r.handlePropose(propose)
+		    //deactivate new proposals channel to prioritize the handling of other protocol messages,
+		    //and to allow commands to accumulate for batching
+		    onOffProposeChan = nil
+            break
+
         case <-fastClockChan:
-            handleNewProposals = true
+            //activate new proposals channel
+            onOffProposeChan = r.ProposeChan
             break
 
         case prepareS := <-r.prepareChan:
@@ -411,118 +416,6 @@ func (r *Replica) run() {
 
         case iid := <-r.instancesToRecover:
             r.startRecoveryForInstance(iid.replica, iid.instance)
-        }
-
-        if handleNewProposals {
-            // unfortunately the only way to activate the new proposals channel every X ms
-            // was to dublicate the body of the select
-            select {
-
-            case propose := <-r.ProposeChan:
-                //got a Propose from a client
-                dlog.Printf("Proposal with op %d\n", propose.Command.Op)
-                r.handlePropose(propose)
-			    handleNewProposals = false
-                break
-
-            case prepareS := <-r.prepareChan:
-                prepare := prepareS.(*epaxosproto.Prepare)
-                //got a Prepare message
-                dlog.Printf("Received Prepare for instance %d.%d\n", prepare.Replica, prepare.Instance)
-                r.handlePrepare(prepare)
-                break
-
-            case preAcceptS := <-r.preAcceptChan:
-                preAccept := preAcceptS.(*epaxosproto.PreAccept)
-                //got a PreAccept message
-                dlog.Printf("Received PreAccept for instance %d.%d\n", preAccept.LeaderId, preAccept.Instance)
-                r.handlePreAccept(preAccept)
-                break
-
-            case acceptS := <-r.acceptChan:
-                accept := acceptS.(*epaxosproto.Accept)
-                //got an Accept message
-                dlog.Printf("Received Accept for instance %d.%d\n", accept.LeaderId, accept.Instance)
-                r.handleAccept(accept)
-                break
-
-            case commitS := <-r.commitChan:
-                commit := commitS.(*epaxosproto.Commit)
-                //got a Commit message
-                dlog.Printf("Received Commit for instance %d.%d\n", commit.LeaderId, commit.Instance)
-                r.handleCommit(commit)
-                break
-
-            case commitS := <-r.commitShortChan:
-                commit := commitS.(*epaxosproto.CommitShort)
-                //got a Commit message
-                dlog.Printf("Received Commit for instance %d.%d\n", commit.LeaderId, commit.Instance)
-                r.handleCommitShort(commit)
-                break
-
-            case prepareReplyS := <-r.prepareReplyChan:
-                prepareReply := prepareReplyS.(*epaxosproto.PrepareReply)
-                //got a Prepare reply
-                dlog.Printf("Received PrepareReply for instance %d.%d\n", prepareReply.Replica,  prepareReply.Instance)
-                r.handlePrepareReply(prepareReply)
-                break
-
-            case preAcceptReplyS := <-r.preAcceptReplyChan:
-                preAcceptReply := preAcceptReplyS.(*epaxosproto.PreAcceptReply)
-                //got a PreAccept reply
-                dlog.Printf("Received PreAcceptReply for instance %d.%d\n", preAcceptReply.Replica, preAcceptReply.Instance)
-                r.handlePreAcceptReply(preAcceptReply)
-                break
-
-            case preAcceptOKS := <-r.preAcceptOKChan:
-                preAcceptOK := preAcceptOKS.(*epaxosproto.PreAcceptOK)
-                //got a PreAccept reply
-                dlog.Printf("Received PreAcceptOK for instance %d.%d\n", r.Id, preAcceptOK.Instance)
-                r.handlePreAcceptOK(preAcceptOK)
-                break
-
-            case acceptReplyS := <-r.acceptReplyChan:
-                acceptReply := acceptReplyS.(*epaxosproto.AcceptReply)
-                //got an Accept reply
-                dlog.Printf("Received AcceptReply for instance %d.%d\n", acceptReply.Replica, acceptReply.Instance)
-                r.handleAcceptReply(acceptReply)
-                break
-
-            case tryPreAcceptS := <-r.tryPreAcceptChan:
-                tryPreAccept := tryPreAcceptS.(*epaxosproto.TryPreAccept)
-                dlog.Printf("Received TryPreAccept for instance %d.%d\n", tryPreAccept.Replica, tryPreAccept.Instance)
-                r.handleTryPreAccept(tryPreAccept)
-                break
-
-            case tryPreAcceptReplyS := <-r.tryPreAcceptReplyChan:
-                tryPreAcceptReply := tryPreAcceptReplyS.(*epaxosproto.TryPreAcceptReply)
-                dlog.Printf("Received TryPreAcceptReply for instance %d.%d\n", tryPreAcceptReply.Replica, tryPreAcceptReply.Instance)
-                r.handleTryPreAcceptReply(tryPreAcceptReply)
-                break
-
-            case beacon := <-r.BeaconChan:
-                dlog.Printf("Received Beacon from replica %d with timestamp %d\n", beacon.Rid, beacon.Timestamp)
-                r.ReplyBeacon(beacon)
-                break
-
-            case <-slowClockChan:
-                if r.Beacon {
-                    for q := int32(0); q < int32(r.N); q++ {
-                        if q == r.Id {
-                            continue
-                        }
-                        r.SendBeacon(q)
-                    }
-                }
-                break
-            case <-r.OnClientConnect:
-                log.Printf("weird %d; conflicted %d; slow %d; happy %d\n", weird, conflicted, slow, happy)
-                weird, conflicted, slow, happy = 0, 0, 0, 0
-                break
-
-            case iid := <-r.instancesToRecover:
-                r.startRecoveryForInstance(iid.replica, iid.instance)
-            }
         }
     }
 }
