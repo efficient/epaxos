@@ -1,12 +1,12 @@
 package paxosproto
 
 import (
-	"io"
-	"sync"
-	"fastrpc"
 	"bufio"
 	"encoding/binary"
-    "state"
+	"fastrpc"
+	"io"
+	"state"
+	"sync"
 )
 
 type byteReader interface {
@@ -22,8 +22,8 @@ func (t *Prepare) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type PrepareCache struct {
-	mu	sync.Mutex
-	cache	[]*Prepare
+	mu    sync.Mutex
+	cache []*Prepare
 }
 
 func NewPrepareCache() *PrepareCache {
@@ -95,8 +95,8 @@ func (t *PrepareReply) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type PrepareReplyCache struct {
-	mu	sync.Mutex
-	cache	[]*PrepareReply
+	mu    sync.Mutex
+	cache []*PrepareReply
 }
 
 func NewPrepareReplyCache() *PrepareReplyCache {
@@ -183,8 +183,8 @@ func (t *Accept) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type AcceptCache struct {
-	mu	sync.Mutex
-	cache	[]*Accept
+	mu    sync.Mutex
+	cache []*Accept
 }
 
 func NewAcceptCache() *AcceptCache {
@@ -275,8 +275,8 @@ func (t *AcceptReply) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type AcceptReplyCache struct {
-	mu	sync.Mutex
-	cache	[]*AcceptReply
+	mu    sync.Mutex
+	cache []*AcceptReply
 }
 
 func NewAcceptReplyCache() *AcceptReplyCache {
@@ -342,8 +342,8 @@ func (t *Commit) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type CommitCache struct {
-	mu	sync.Mutex
-	cache	[]*Commit
+	mu    sync.Mutex
+	cache []*Commit
 }
 
 func NewCommitCache() *CommitCache {
@@ -434,8 +434,8 @@ func (t *CommitShort) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type CommitShortCache struct {
-	mu	sync.Mutex
-	cache	[]*CommitShort
+	mu    sync.Mutex
+	cache []*CommitShort
 }
 
 func NewCommitShortCache() *CommitShortCache {
