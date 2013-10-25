@@ -2,18 +2,19 @@ package main
 
 import (
 	"bufio"
-	"dlog"
 	"flag"
 	"fmt"
-	"genericsmrproto"
 	"log"
-	"masterproto"
 	"math/rand"
 	"net"
 	"net/rpc"
 	"runtime"
-	"state"
 	"time"
+
+	"github.com/efficient/epaxos/src/dlog"
+	"github.com/efficient/epaxos/src/genericsmrproto"
+	"github.com/efficient/epaxos/src/masterproto"
+	"github.com/efficient/epaxos/src/state"
 )
 
 var masterAddr *string = flag.String("maddr", "", "Master address. Defaults to localhost")

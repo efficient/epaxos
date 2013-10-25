@@ -1,7 +1,7 @@
 package genericsmrproto
 
 import (
-	"state"
+	"github.com/efficient/epaxos/src/state"
 )
 
 const (

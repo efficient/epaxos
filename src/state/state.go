@@ -1,10 +1,11 @@
 package state
 
 import (
-	"sync"
-	//"fmt"
-	//"code.google.com/p/leveldb-go/leveldb"
 	//"encoding/binary"
+	//"fmt"
+	"sync"
+
+	//"code.google.com/p/leveldb-go/leveldb"
 )
 
 type Operation uint8

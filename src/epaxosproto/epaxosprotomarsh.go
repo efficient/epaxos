@@ -3,10 +3,11 @@ package epaxosproto
 import (
 	"bufio"
 	"encoding/binary"
-	"fastrpc"
 	"io"
-	"state"
 	"sync"
+
+	"github.com/efficient/epaxos/src/fastrpc"
+	"github.com/efficient/epaxos/src/state"
 )
 
 type byteReader interface {

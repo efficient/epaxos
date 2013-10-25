@@ -1,19 +1,20 @@
 package epaxos
 
 import (
-	"bloomfilter"
-	"dlog"
 	"encoding/binary"
-	"epaxosproto"
-	"fastrpc"
-	"genericsmr"
-	"genericsmrproto"
 	"io"
 	"log"
 	"math"
-	"state"
 	"sync"
 	"time"
+
+	"github.com/efficient/epaxos/src/bloomfilter"
+	"github.com/efficient/epaxos/src/dlog"
+	"github.com/efficient/epaxos/src/epaxosproto"
+	"github.com/efficient/epaxos/src/fastrpc"
+	"github.com/efficient/epaxos/src/genericsmr"
+	"github.com/efficient/epaxos/src/genericsmrproto"
+	"github.com/efficient/epaxos/src/state"
 )
 
 const MAX_DEPTH_DEP = 10

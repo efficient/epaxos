@@ -1,11 +1,12 @@
 package epaxos
 
 import (
-	//    "state"
-	"epaxosproto"
-	"genericsmrproto"
 	"sort"
 	"time"
+
+	//"github.com/efficient/epaxos/src/state"
+	"github.com/efficient/epaxos/src/epaxosproto"
+	"github.com/efficient/epaxos/src/genericsmrproto"
 )
 
 const (
