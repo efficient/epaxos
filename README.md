@@ -49,6 +49,8 @@ the common case or after at most two rounds in any case.
 The struct marshaling and unmarshaling code was generated automatically using
 the tool available at: https://code.google.com/p/gobin-codegen/
 
+The repository also contains a machine-readable (and model-checkable) specification of EPaxos in TLA+.
+
 
 AUTHORS:
 
