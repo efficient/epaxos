@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset='utf-8' />
+    <meta http-equiv="X-UA-Compatible" content="chrome=1" />
+    <meta name="description" content="Epaxos : " />
+
+    <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
+
+    <title>Epaxos</title>
+  </head>
+
+  <body>
+
+    <!-- HEADER -->
+    <div id="header_wrap" class="outer">
+        <header class="inner">
+          <a id="forkme_banner" href="https://github.com/efficient/epaxos">View on GitHub</a>
+
+          <h1 id="project_title">Epaxos</h1>
+          <h2 id="project_tagline"></h2>
+
+            <section id="downloads">
+              <a class="zip_download_link" href="https://github.com/efficient/epaxos/zipball/master">Download this project as a .zip file</a>
+              <a class="tar_download_link" href="https://github.com/efficient/epaxos/tarball/master">Download this project as a tar.gz file</a>
+            </section>
+        </header>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div id="main_content_wrap" class="outer">
+      <section id="main_content" class="inner">
+        <h1>
+<a name="epaxos" class="anchor" href="#epaxos"><span class="octicon octicon-link"></span></a>EPaxos</h1>
+
+<h3>
+<a name="what-is-epaxos" class="anchor" href="#what-is-epaxos"><span class="octicon octicon-link"></span></a>What is EPaxos?</h3>
+
+<p>EPaxos is an efficient, leaderless replication protocol. The name stands for <em>Egalitarian Paxos</em> -- EPaxos is based
+on the Paxos consensus algorithm. As such, it can tolerate up to F concurrent replica failures with 2F+1 total replicas.</p>
+
+<h3>
+<a name="how-does-epaxos-differ-from-paxos-and-other-paxos-variants" class="anchor" href="#how-does-epaxos-differ-from-paxos-and-other-paxos-variants"><span class="octicon octicon-link"></span></a>How does EPaxos differ from Paxos and other Paxos variants?</h3>
+
+<p>To function effectively as a replication protocol, Paxos has to rely on a stable leader replica (this optimization is known as Multi-Paxos). The leader can become a bottleneck for performance: it has to handle more messages than the other replicas, and remote clients have to contact the leader, thus experiencing higher latency. Other Paxos variants either also rely on a stable leader, or have a pre-established scheme that allows different replicas to take turns in proposing commands (such as Mencius). This latter scheme
+suffers from tight coupling of the performance of the system from that of every replica -- i.e., the system runs at the speed of the slowest replica.</p>
+
+<p>EPaxos is an efficient, leaderless protocol. It provides <strong>strong consistency with optimal wide-area latency, perfect load-balancing across replicas (both in the local and the wide area), and constant availability for up to F failures</strong>. EPaxos also decouples the performance of the slowest replicas from that of the fastest, so it can better tolerate slow replicas than previous protocols.</p>
+
+<h3>
+<a name="how-does-epaxos-work" class="anchor" href="#how-does-epaxos-work"><span class="octicon octicon-link"></span></a>How does EPaxos work?</h3>
+
+<p>We have <a href="http://dl.acm.org/ft_gateway.cfm?id=2517350&amp;ftid=1403953&amp;dwn=1">an SOSP 2013 paper</a> that describes EPaxos in detail.</p>
+
+<p>A simpler, more straightforward explanation is coming here soon.</p>
+
+<h3>
+<a name="what-is-in-this-repository" class="anchor" href="#what-is-in-this-repository"><span class="octicon octicon-link"></span></a>What is in this repository?</h3>
+
+<p>This repository contains the Go implementations of:</p>
+
+<ul>
+<li><p>Egalitarian Paxos (EPaxos), a new distributed consensus algorithm based on
+Paxos EPaxos achieves three goals: (1) availability <em>without interruption</em>
+as long as a simple majority of replicas are reachable---its availability is not
+interrupted when replicas crash or fail to respond; (2) uniform load balancing
+across all replicas---no replicas experience higher load because they have
+special roles; and (3) optimal commit latency in the wide-area when tolerating
+one and two failures, under realistic conditions. Egalitarian Paxos is to our
+knowledge the first distributed consensus protocol to achieve all of these goals
+efficiently: requiring only a simple majority of replicas to be non-faulty,
+using a number of messages linear in the number of replicas to choose a command,
+and committing commands after just one communication round (one round trip) in
+the common case or after at most two rounds in any case.</p></li>
+<li><p>(classic) Paxos</p></li>
+<li><p>Mencius</p></li>
+<li><p>Generalized Paxos</p></li>
+</ul><p>The struct marshaling and unmarshaling code was generated automatically using
+the tool available at: <a href="https://code.google.com/p/gobin-codegen/">https://code.google.com/p/gobin-codegen/</a></p>
+
+<p>AUTHORS:</p>
+
+<p>Iulian Moraru, David G. Andersen -- Carnegie Mellon University</p>
+
+<p>Michael Kaminsky -- Intel Labs</p>
+      </section>
+    </div>
+
+    <!-- FOOTER  -->
+    <div id="footer_wrap" class="outer">
+      <footer class="inner">
+        <p class="copyright">Epaxos maintained by <a href="https://github.com/efficient">efficient</a></p>
+        <p>Published with <a href="http://pages.github.com">GitHub Pages</a></p>
+      </footer>
+    </div>
+
+    
+
+  </body>
+</html>
