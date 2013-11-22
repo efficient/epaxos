@@ -46,7 +46,7 @@ on the Paxos consensus algorithm. As such, it can tolerate up to F concurrent re
 <p>To function effectively as a replication protocol, Paxos has to rely on a stable leader replica (this optimization is known as Multi-Paxos). The leader can become a bottleneck for performance: it has to handle more messages than the other replicas, and remote clients have to contact the leader, thus experiencing higher latency. Other Paxos variants either also rely on a stable leader, or have a pre-established scheme that allows different replicas to take turns in proposing commands (such as Mencius). This latter scheme
 suffers from tight coupling of the performance of the system from that of every replica -- i.e., the system runs at the speed of the slowest replica.</p>
 
-<p>EPaxos is an efficient, leaderless protocol. It provides <strong>strong consistency with optimal wide-area latency, perfect load-balancing across replicas (both in the local and the wide area), and constant availability for up to F failures</strong>. EPaxos also decouples the performance of the slowest replicas from that of the fastest, so it can better tolerate slow replicas than previous protocols.</p>
+<p>EPaxos is an efficient, leaderless protocol. It provides <strong>strong consistency with optimal wide-area latency, perfect load-balancing across replicas (both in the local and the wide area), and constant availability for up to F failures</strong>. EPaxos also decouples the performance of the slowest replicas from that of the fastest, so it can tolerate slow replicas better than previous protocols.</p>
 
 <h3>
 <a name="how-does-epaxos-work" class="anchor" href="#how-does-epaxos-work"><span class="octicon octicon-link"></span></a>How does EPaxos work?</h3>
