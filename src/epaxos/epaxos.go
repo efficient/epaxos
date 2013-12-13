@@ -697,6 +697,7 @@ func (r *Replica) updateCommitted(replica int32) {
 	}
 }
 
+// updateConflicts updates the conflict map and the maxSeqPerKey of the given replica
 func (r *Replica) updateConflicts(cmds []state.Command, replica int32, instance int32, seq int32) {
 	for i := 0; i < len(cmds); i++ {
 		if d, present := r.conflicts[replica][cmds[i].K]; present {
@@ -704,6 +705,7 @@ func (r *Replica) updateConflicts(cmds []state.Command, replica int32, instance 
 				r.conflicts[replica][cmds[i].K] = instance
 			}
 		}
+
 		if s, present := r.maxSeqPerKey[cmds[i].K]; present {
 			if s < seq {
 				r.maxSeqPerKey[cmds[i].K] = seq
