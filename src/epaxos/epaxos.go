@@ -703,7 +703,9 @@ func (r *Replica) updateConflicts(cmds []state.Command, replica int32, instance 
 			if d < instance {
 				r.conflicts[replica][cmds[i].K] = instance
 			}
-		}
+		} else {
+            r.conflicts[replica][cmds[i].K] = instance
+        }
 		if s, present := r.maxSeqPerKey[cmds[i].K]; present {
 			if s < seq {
 				r.maxSeqPerKey[cmds[i].K] = seq
