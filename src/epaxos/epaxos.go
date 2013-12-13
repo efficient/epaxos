@@ -67,8 +67,8 @@ type Replica struct {
 	CommittedUpTo         [DS]int32     // highest committed instance per replica that this replica knows about
 	ExecedUpTo            []int32       // instance up to which all commands have been executed (including iteslf)
 	exec                  *Exec
-	conflicts             []map[state.Key]int32
-	maxSeqPerKey          map[state.Key]int32
+	conflicts             []map[state.Key]int32 // an array of conflict maps ([conflict key] -> [the highest id of the command with the key])
+	maxSeqPerKey          map[state.Key]int32   // [key] -> [the highest id of the command with the key]
 	maxSeq                int32
 	latestCPReplica       int32
 	latestCPInstance      int32
@@ -714,16 +714,24 @@ func (r *Replica) updateConflicts(cmds []state.Command, replica int32, instance 
 	}
 }
 
-func (r *Replica) updateAttributes(cmds []state.Command, seq int32, deps [DS]int32, replica int32, instance int32) (int32, [DS]int32, bool) {
+// updateAttributes returns deps and seq based on the batch of cmds and the current conflict maps
+func (r *Replica) updateAttributes(cmds []state.Command, seq int32, deps [DS]int32, replica int32,
+	instance int32) (int32, [DS]int32, bool) {
+
 	changed := false
+
+	// build deps based on the conflict maps of all the replica in the cluster
 	for q := 0; q < r.N; q++ {
 		if r.Id != replica && int32(q) == replica {
 			continue
 		}
-		for i := 0; i < len(cmds); i++ {
-			if d, present := (r.conflicts[q])[cmds[i].K]; present {
-				if d > deps[q] {
-					deps[q] = d
+
+		// for each command in the batch, find out the highest conflict id
+		// record the highest one among all and update the seq to that one
+		for cmd := range cmds {
+			if id, present := (r.conflicts[q])[cmd.K]; present {
+				if id > deps[q] {
+					deps[q] = id
 					if seq <= r.InstanceSpace[q][d].Seq {
 						seq = r.InstanceSpace[q][d].Seq + 1
 					}
@@ -732,9 +740,11 @@ func (r *Replica) updateAttributes(cmds []state.Command, seq int32, deps [DS]int
 				}
 			}
 		}
+
 	}
-	for i := 0; i < len(cmds); i++ {
-		if s, present := r.maxSeqPerKey[cmds[i].K]; present {
+
+	for cmd := range cmds {
+		if s, present := r.maxSeqPerKey[cmd.K]; present {
 			if seq <= s {
 				changed = true
 				seq = s + 1
