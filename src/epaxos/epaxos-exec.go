@@ -65,11 +65,9 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 	stack = stack[0 : l+1]
 	stack[l] = v
 
-	for q, inst := range v.Deps {
+	for q := int32(0); q < int32(e.r.N); q++ {
+		inst := v.Deps[q]
 		for i := e.r.ExecedUpTo[q] + 1; i <= inst; i++ {
-			if i <= e.r.ExecedUpTo[q] {
-				continue
-			}
 			for e.r.InstanceSpace[q][i] == nil || e.r.InstanceSpace[q][i].Cmds == nil || v.Cmds == nil {
 				time.Sleep(1000 * 1000)
 			}

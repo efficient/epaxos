@@ -24,7 +24,7 @@ const ADAPT_TIME_SEC = 10
 
 const MAX_BATCH = 1000
 
-const COMMIT_GRACE_PERIOD = 2 * 1e9 //2 seconds
+const COMMIT_GRACE_PERIOD = 10 * 1e9 //10 seconds
 
 const BF_K = 4
 const BF_M_N = 32.0
@@ -440,6 +440,12 @@ func (r *Replica) executeCommands() {
 		for q := 0; q < r.N; q++ {
 			inst := int32(0)
 			for inst = r.ExecedUpTo[q] + 1; inst < r.crtInstance[q]; inst++ {
+				if r.InstanceSpace[q][inst] != nil && r.InstanceSpace[q][inst].Status == epaxosproto.EXECUTED {
+					if inst == r.ExecedUpTo[q]+1 {
+						r.ExecedUpTo[q] = inst
+					}
+					continue
+				}
 				if r.InstanceSpace[q][inst] == nil || r.InstanceSpace[q][inst].Status != epaxosproto.COMMITTED {
 					if inst == problemInstance[q] {
 						timeout[q] += SLEEP_TIME_NS
@@ -455,12 +461,6 @@ func (r *Replica) executeCommands() {
 						continue
 					}
 					break
-				}
-				if r.InstanceSpace[q][inst].Status == epaxosproto.EXECUTED {
-					if inst == r.ExecedUpTo[q]+1 {
-						r.ExecedUpTo[q] = inst
-					}
-					continue
 				}
 				if ok := r.exec.executeCommand(int32(q), inst); ok {
 					executed = true
