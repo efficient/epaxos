@@ -1,11 +1,12 @@
 package epaxos
 
 import (
-	"epaxosproto"
 	"fmt"
-	"genericsmr"
-	"state"
 	"testing"
+
+	"github.com/efficient/epaxos/src/epaxosproto"
+	"github.com/efficient/epaxos/src/genericsmr"
+	"github.com/efficient/epaxos/src/state"
 )
 
 func initReplica() *Replica {

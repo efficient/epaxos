@@ -1,22 +1,23 @@
 package main
 
 import (
-	"epaxos"
 	"flag"
 	"fmt"
-	"gpaxos"
 	"log"
-	"masterproto"
-	"mencius"
 	"net"
 	"net/http"
 	"net/rpc"
 	"os"
 	"os/signal"
-	"paxos"
 	"runtime"
 	"runtime/pprof"
 	"time"
+
+	"github.com/efficient/epaxos/src/epaxos"
+	"github.com/efficient/epaxos/src/gpaxos"
+	"github.com/efficient/epaxos/src/masterproto"
+	"github.com/efficient/epaxos/src/mencius"
+	"github.com/efficient/epaxos/src/paxos"
 )
 
 var portnum *int = flag.Int("port", 7070, "Port # to listen on. Defaults to 7070")

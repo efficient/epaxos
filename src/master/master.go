@@ -3,14 +3,15 @@ package main
 import (
 	"flag"
 	"fmt"
-	"genericsmrproto"
 	"log"
-	"masterproto"
 	"net"
 	"net/http"
 	"net/rpc"
 	"sync"
 	"time"
+
+	"github.com/efficient/epaxos/src/genericsmrproto"
+	"github.com/efficient/epaxos/src/masterproto"
 )
 
 var portnum *int = flag.Int("port", 7087, "Port # to listen on. Defaults to 7087")

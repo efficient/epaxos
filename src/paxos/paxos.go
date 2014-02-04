@@ -1,16 +1,17 @@
 package paxos
 
 import (
-	"dlog"
 	"encoding/binary"
-	"fastrpc"
-	"genericsmr"
-	"genericsmrproto"
 	"io"
 	"log"
-	"paxosproto"
-	"state"
 	"time"
+
+	"github.com/efficient/epaxos/src/dlog"
+	"github.com/efficient/epaxos/src/fastrpc"
+	"github.com/efficient/epaxos/src/genericsmr"
+	"github.com/efficient/epaxos/src/genericsmrproto"
+	"github.com/efficient/epaxos/src/paxosproto"
+	"github.com/efficient/epaxos/src/state"
 )
 
 const CHAN_BUFFER_SIZE = 200000

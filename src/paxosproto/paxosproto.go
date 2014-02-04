@@ -1,7 +1,7 @@
 package paxosproto
 
 import (
-	"state"
+	"github.com/efficient/epaxos/src/state"
 )
 
 const (
