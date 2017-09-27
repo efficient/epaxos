@@ -1,0 +1,92 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: epaxos-master
+  labels:
+    app: epaxos-master
+spec:
+  ports:
+  - port: 7087
+  selector:
+    app: epaxos-master
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: epaxos-config
+data:
+  port.master: "7087"
+  port.server: "7001"
+  addr.master: "epaxos-master"
+  num.replicas: "2"
+---
+apiVersion: apps/v1beta1 
+kind: Deployment
+metadata:
+  name: epaxos-master
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: epaxos-master
+    spec:
+      containers:
+      - name: epaxos-master
+        image: epaxos
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 7087
+        env:
+        - name : TYPE
+          value: "master"
+        - name : MPORT
+          valueFrom:
+            configMapKeyRef:
+              name: epaxos-config
+              key: port.master
+        - name : NREPLICAS
+          valueFrom:
+            configMapKeyRef:
+              name: epaxos-config
+              key: num.replicas
+---
+apiVersion: apps/v1beta1 
+kind: Deployment
+metadata:
+  name: epaxos-server
+spec:
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: epaxos-server
+    spec:
+      containers:
+      - name: epaxos-server
+        image: epaxos
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 7001
+        env:
+        - name : TYPE
+          value: "server"
+        - name: ADDR
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name : SPORT
+          valueFrom:
+            configMapKeyRef:
+              name: epaxos-config
+              key: port.server
+        - name : MADDR
+          valueFrom:
+            configMapKeyRef:
+              name: epaxos-config
+              key: addr.master
+        - name : MPORT
+          valueFrom:
+            configMapKeyRef:
+              name: epaxos-config
+              key: port.master
