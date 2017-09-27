@@ -88,6 +88,7 @@ func registerWithMaster(masterAddr string) (int, []string) {
 	var reply masterproto.RegisterReply
 
 	for done := false; !done; {
+		log.Printf("connecting to: %v",masterAddr)
 		mcli, err := rpc.DialHTTP("tcp", masterAddr)
 		if err == nil {
 			err = mcli.Call("Master.Register", args, &reply)
@@ -95,9 +96,14 @@ func registerWithMaster(masterAddr string) (int, []string) {
 				done = true
 				break
 			}
+		} 
+		if err != nil {
+		   log.Printf("%v",err)
 		}
 		time.Sleep(1e9)
 	}
+	
+	log.Printf("node list %v", reply.NodeList)
 
 	return reply.ReplicaId, reply.NodeList
 }

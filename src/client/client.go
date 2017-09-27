@@ -61,6 +61,7 @@ func main() {
 	}
 
 	N = len(rlReply.ReplicaList)
+	log.Printf("node list %v",rlReply.ReplicaList)
 	servers := make([]net.Conn, N)
 	readers := make([]*bufio.Reader, N)
 	writers := make([]*bufio.Writer, N)
