@@ -63,7 +63,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error making the GetReplicaList RPC")
 	}
-	
+
 	N = len(rlReply.ReplicaList)
 	minLeader := 0
 	minLatency := math.MaxInt32
@@ -81,7 +81,6 @@ func main() {
 			}
 		}
 	}
-	log.Printf("%v -> %v", minLatency, minLeader)
 
 	log.Printf("node list %v, closest = (%v,%vms)",rlReply.ReplicaList,minLeader,minLatency)
 	servers := make([]net.Conn, N)
