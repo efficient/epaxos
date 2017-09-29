@@ -2,6 +2,17 @@
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
+if [ "${TYPE}" == "" ];
+then
+    echo "usage: define env variables, as listed below
+    TYPE = [master,server,client] # type of instance
+    MPORT, MADDR # master instance
+    MPORT, MADDR, ADDR, SPORT, SERVER_EXTRA_ARGS # server instance
+    MPORT, MADDR, CLIENT_EXTRA_ARGS # client instance
+    ";
+    exit 0
+fi;
+
 # Usage of ./bin/master:
 #   -N int
 #     	Number of replicas. Defaults to 3. (default 3)
@@ -44,7 +55,7 @@ fi;
 
 if [ "${TYPE}" == "server" ];
 then
-    args="-addr ${ADDR} -port ${SPORT} -maddr ${MADDR} -mport ${MPORT}"; 
+    args="-addr ${ADDR} -port ${SPORT} -maddr ${MADDR} -mport ${MPORT} ${SERVER_EXTRA_ARGS}"; 
     echo "server mode: ${args}"
     ${DIR}/server ${args}
 fi;
@@ -77,7 +88,7 @@ fi;
 
 if [ "${TYPE}" == "client" ];
 then
-    args="-maddr ${MADDR} -mport ${MPORT}"; 
+    args="-maddr ${MADDR} -mport ${MPORT} ${CLIENT_EXTRA_ARGS}"; 
     echo "client mode: ${args}"
     ${DIR}/client ${args}
 fi;

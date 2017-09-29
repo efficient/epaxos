@@ -8,9 +8,9 @@ RUN GOPATH=/app/epaxos go install server
 RUN GOPATH=/app/epaxos go install client
 
 ENV TYPE master
+ENV MADDR localhost
 ENV MPORT 7087
 ENV NREPLICAS 1
 ENV SPORT 7001
-ENV MADDR localhost 
 
 CMD ["bash", "/app/epaxos/bin/run.sh"]

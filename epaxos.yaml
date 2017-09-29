@@ -18,9 +18,10 @@ data:
   port.master: "7087"
   port.server: "7001"
   addr.master: "epaxos-master"
-  num.replicas: "2"
+  num.replicas: "3"
+  extra.server: "-exec -g"
 ---
-apiVersion: apps/v1beta1 
+apiVersion: apps/v1beta1
 kind: Deployment
 metadata:
   name: epaxos-master
@@ -33,8 +34,7 @@ spec:
     spec:
       containers:
       - name: epaxos-master
-        image: epaxos
-        imagePullPolicy: Never
+        image: Otrack/epaxos
         ports:
         - containerPort: 7087
         env:
@@ -56,7 +56,7 @@ kind: Deployment
 metadata:
   name: epaxos-server
 spec:
-  replicas: 2
+  replicas: 3
   template:
     metadata:
       labels:
@@ -64,8 +64,7 @@ spec:
     spec:
       containers:
       - name: epaxos-server
-        image: epaxos
-        imagePullPolicy: Never
+        image: Otrack/epaxos
         ports:
         - containerPort: 7001
         env:
@@ -90,3 +89,8 @@ spec:
             configMapKeyRef:
               name: epaxos-config
               key: port.master
+        - name : SERVER_EXTRA_ARGS
+          valueFrom:
+            configMapKeyRef:
+              name: epaxos-config
+              key: extra.server
