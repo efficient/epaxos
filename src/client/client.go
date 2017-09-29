@@ -14,6 +14,10 @@ import (
 	"runtime"
 	"state"
 	"time"
+	"os/exec"
+	"strings"
+	"math"
+	"strconv"
 )
 
 var masterAddr *string = flag.String("maddr", "", "Master address. Defaults to localhost")
@@ -59,9 +63,27 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error making the GetReplicaList RPC")
 	}
-
+	
 	N = len(rlReply.ReplicaList)
-	log.Printf("node list %v",rlReply.ReplicaList)
+	minLeader := 0
+	minLatency := math.MaxInt32
+	for i:=0; i<N; i++{
+		addr := strings.Split(string(rlReply.ReplicaList[i]),":")[0]
+		if addr == ""{
+			addr = "127.0.0.1"
+		}
+		out,err := exec.Command("ping",addr,"-c 3","-q").Output()
+		if err==nil {
+			latency,_ := strconv.Atoi(strings.Split(string(out),"/")[4])
+			if minLatency > latency {
+				minLeader = i
+				minLatency = latency
+			}
+		}
+	}
+	log.Printf("%v -> %v", minLatency, minLeader)
+
+	log.Printf("node list %v, closest = (%v,%vms)",rlReply.ReplicaList,minLeader,minLatency)
 	servers := make([]net.Conn, N)
 	readers := make([]*bufio.Reader, N)
 	writers := make([]*bufio.Writer, N)
@@ -71,8 +93,9 @@ func main() {
 	put := make([]bool, *reqsNb / *rounds + *eps)
 	perReplicaCount := make([]int, N)
 	test := make([]int, *reqsNb / *rounds + *eps)
+
 	for i := 0; i < len(rarray); i++ {
-		r := rand.Intn(N)
+		r := minLeader
 		rarray[i] = r
 		if i < *reqsNb / *rounds {
 			perReplicaCount[r]++
@@ -201,7 +224,7 @@ func main() {
 
 		after := time.Now()
 
-		fmt.Printf("Round took %v with leader %v\n", after.Sub(before),leader)
+		fmt.Printf("Round took %v\n", after.Sub(before))
 
 		if *check {
 			for j := 0; j < n; j++ {
@@ -221,6 +244,7 @@ func main() {
 				log.Printf("New leader is replica %d\n", leader)
 			}
 		}
+
 	}
 
 	after_total := time.Now()
