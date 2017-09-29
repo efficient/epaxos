@@ -66,7 +66,7 @@ func main() {
 
 	N = len(rlReply.ReplicaList)
 	minLeader := 0
-	minLatency := math.MaxInt32
+	minLatency := math.MaxFloat64
 	for i:=0; i<N; i++{
 		addr := strings.Split(string(rlReply.ReplicaList[i]),":")[0]
 		if addr == ""{
@@ -74,7 +74,8 @@ func main() {
 		}
 		out,err := exec.Command("ping",addr,"-c 3","-q").Output()
 		if err==nil {
-			latency,_ := strconv.Atoi(strings.Split(string(out),"/")[4])
+			latency,_ := strconv.ParseFloat(strings.Split(string(out),"/")[4],64)
+			log.Printf("%v -> %v", i, latency)
 			if minLatency > latency {
 				minLeader = i
 				minLatency = latency
