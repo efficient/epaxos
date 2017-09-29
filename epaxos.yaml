@@ -34,7 +34,7 @@ spec:
     spec:
       containers:
       - name: epaxos-master
-        image: Otrack/epaxos
+        image: 0track/epaxos
         ports:
         - containerPort: 7087
         env:
@@ -64,7 +64,7 @@ spec:
     spec:
       containers:
       - name: epaxos-server
-        image: Otrack/epaxos
+        image: 0track/epaxos
         ports:
         - containerPort: 7001
         env:
