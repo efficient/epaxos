@@ -1,0 +1,58 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: epaxos-redis
+  labels:
+    app: epaxos-redis
+spec:
+  type: NodePort
+  ports:
+  - port: 6379
+  selector:
+    app: epaxos-redis
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: epaxos-redis
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: epaxos-redis
+    spec:
+      containers:
+      - name: epaxos-redis
+        image: redis
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: epaxos-client
+spec:
+  parallelism: 1
+  completions: 1
+  template:
+    metadata:
+      name: epaxos-client
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: client
+          image: 0track/epaxos
+          env:
+            - name : TYPE
+              value: "client"
+            - name : MADDR
+              valueFrom:
+                configMapKeyRef:
+                  name: epaxos-config
+                  key: addr.master
+            - name : MPORT
+              valueFrom:
+                configMapKeyRef:
+                  name: epaxos-config
+                  key: port.master
+            - name : CLIENT_EXTRA_ARGS
+              value: "-raddr epaxos-redis -rport 6379 -q 1000 -r 1000 -e"
