@@ -31,8 +31,8 @@ kind: Job
 metadata:
   name: epaxos-client
 spec:
-  parallelism: 1
-  completions: 1
+  parallelism: 3
+  completions: 3
   template:
     metadata:
       name: epaxos-client

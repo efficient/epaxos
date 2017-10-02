@@ -116,7 +116,7 @@ func main() {
 	writers := make([]*bufio.Writer, N)
 
 	rarray = make([]int, *reqsNb / *rounds + *eps)
-	tarray = make([]int64, *reqsNb / *rounds + *eps)
+	tarray = make([]int64, *rounds)
 	karray := make([]int64, *reqsNb / *rounds + *eps)
 	put := make([]bool, *reqsNb / *rounds + *eps)
 	perReplicaCount := make([]int, N)
