@@ -20,6 +20,9 @@ import (
 	"strconv"
 )
 
+import "github.com/go-redis/redis"
+
+var name string = *flag.String("name", "", "Name of this client. Defaults to closest replica IP + random int")
 var masterAddr *string = flag.String("maddr", "", "Master address. Defaults to localhost")
 var masterPort *int = flag.Int("mport", 7087, "Master port.  Defaults to 7077.")
 var reqsNb *int = flag.Int("q", 5000, "Total number of requests. Defaults to 5000.")
@@ -33,6 +36,8 @@ var eps *int = flag.Int("eps", 0, "Send eps more messages per round than the cli
 var conflicts *int = flag.Int("c", -1, "Percentage of conflicts. Defaults to 0%")
 var s = flag.Float64("s", 2, "Zipfian s parameter")
 var v = flag.Float64("v", 1, "Zipfian v parameter")
+var redisAddr *string = flag.String("raddr", "", "Redis address. Disabled per default.")
+var redisPort *int = flag.Int("rport", 6389, "Redis port.  Defaults to 6379.")
 
 var N int
 
@@ -40,6 +45,8 @@ var successful []int
 
 var rarray []int
 var rsp []bool
+
+var redisServer *redis.Client
 
 func main() {
 	flag.Parse()
@@ -58,6 +65,19 @@ func main() {
 		log.Fatalf("Error connecting to master\n")
 	}
 
+	if *redisAddr != "" {
+		redisServer = redis.NewClient(&redis.Options{
+			Addr:     fmt.Sprintf("%s:%d", *redisAddr, *redisPort),
+			Password: "", // no password set
+			DB:       0,  // use default DB
+		})
+		if redisServer.Ping().Err() != nil {
+			log.Fatalf("Error connecting to Redis (%v)\n %v\n",
+				fmt.Sprintf("%s:%d", *redisAddr, *redisPort),
+				redisServer.Ping().Err())
+		}
+	}
+
 	rlReply := new(masterproto.GetReplicaListReply)
 	err = master.Call("Master.GetReplicaList", new(masterproto.GetReplicaListArgs), rlReply)
 	if err != nil {
@@ -67,14 +87,14 @@ func main() {
 	N = len(rlReply.ReplicaList)
 	minLeader := 0
 	minLatency := math.MaxFloat64
-	for i:=0; i<N; i++{
-		addr := strings.Split(string(rlReply.ReplicaList[i]),":")[0]
-		if addr == ""{
+	for i := 0; i < N; i++ {
+		addr := strings.Split(string(rlReply.ReplicaList[i]), ":")[0]
+		if addr == "" {
 			addr = "127.0.0.1"
 		}
-		out,err := exec.Command("ping",addr,"-c 3","-q").Output()
-		if err==nil {
-			latency,_ := strconv.ParseFloat(strings.Split(string(out),"/")[4],64)
+		out, err := exec.Command("ping", addr, "-c 3", "-q").Output()
+		if err == nil {
+			latency, _ := strconv.ParseFloat(strings.Split(string(out), "/")[4], 64)
 			log.Printf("%v -> %v", i, latency)
 			if minLatency > latency {
 				minLeader = i
@@ -84,6 +104,11 @@ func main() {
 	}
 
 	log.Printf("node list %v, closest = (%v,%vms)",rlReply.ReplicaList,minLeader,minLatency)
+	if name == "" {
+		name = "client-"+rlReply.ReplicaList[minLeader]
+	}
+	log.Printf(name)
+
 	servers := make([]net.Conn, N)
 	readers := make([]*bufio.Reader, N)
 	writers := make([]*bufio.Writer, N)
@@ -225,6 +250,12 @@ func main() {
 		after := time.Now()
 
 		fmt.Printf("Round took %v\n", after.Sub(before))
+		if redisServer!=nil{
+			cmd := redisServer.LPush(name,after.Sub(before).Nanoseconds()/1000)
+			if cmd.Err()!=nil{
+				log.Fatal("Error connecting to Redis.")
+			}
+		}
 
 		if *check {
 			for j := 0; j < n; j++ {
@@ -261,6 +292,9 @@ func main() {
 		if client != nil {
 			client.Close()
 		}
+	}
+	if redisServer!=nil{
+		redisServer.Close()
 	}
 	master.Close()
 }
