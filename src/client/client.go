@@ -25,11 +25,11 @@ import "github.com/go-redis/redis"
 var name string = *flag.String("name", "", "Name of this client. Defaults to closest replica IP + random int")
 var masterAddr *string = flag.String("maddr", "", "Master address. Defaults to localhost")
 var masterPort *int = flag.Int("mport", 7087, "Master port. ")
-var reqsNb *int = flag.Int("q", 5000, "Total number of requests. ")
+var reqsNb *int = flag.Int("q", 1000, "Total number of requests. ")
 var writes *int = flag.Int("w", 100, "Percentage of updates (writes). ")
 var noLeader *bool = flag.Bool("e", false, "Egalitarian (no leader). ")
 var fast *bool = flag.Bool("f", false, "Fast Paxos: send message directly to all replicas. ")
-var rounds *int = flag.Int("r", 1, "Split the total number of requests into this many rounds, and do rounds sequentially. Defaults to 1.")
+var rounds *int = flag.Int("r", 1000, "Split the total number of requests into this many rounds, and do rounds sequentially. ")
 var procs *int = flag.Int("p", 2, "GOMAXPROCS. ")
 var check = flag.Bool("check", false, "Check that every expected reply was received exactly once.")
 var eps *int = flag.Int("eps", 0, "Send eps more messages per round than the client will wait for (to discount stragglers). ")
@@ -47,6 +47,7 @@ var rarray []int
 var rsp []bool
 
 var redisServer *redis.Client
+var tarray []int64
 
 func main() {
 	flag.Parse()
@@ -105,7 +106,8 @@ func main() {
 
 	log.Printf("node list %v, closest = (%v,%vms)",rlReply.ReplicaList,minLeader,minLatency)
 	if name == "" {
-		name = "client-"+rlReply.ReplicaList[minLeader]
+		rand.Seed(time.Now().Unix())
+		name = "client-"+strconv.FormatUint(rand.Uint64(),16)+"-"+rlReply.ReplicaList[minLeader]
 	}
 	log.Printf(name)
 
@@ -114,6 +116,7 @@ func main() {
 	writers := make([]*bufio.Writer, N)
 
 	rarray = make([]int, *reqsNb / *rounds + *eps)
+	tarray = make([]int64, *reqsNb / *rounds + *eps)
 	karray := make([]int64, *reqsNb / *rounds + *eps)
 	put := make([]bool, *reqsNb / *rounds + *eps)
 	perReplicaCount := make([]int, N)
@@ -250,12 +253,7 @@ func main() {
 		after := time.Now()
 
 		fmt.Printf("Round took %v\n", after.Sub(before))
-		if redisServer!=nil{
-			cmd := redisServer.LPush(name,after.Sub(before).Nanoseconds()/1000)
-			if cmd.Err()!=nil{
-				log.Fatal("Error connecting to Redis.")
-			}
-		}
+		tarray[j] = after.Sub(before).Nanoseconds()
 
 		if *check {
 			for j := 0; j < n; j++ {
@@ -287,6 +285,22 @@ func main() {
 	}
 
 	fmt.Printf("Successful: %d\n", s)
+
+	if redisServer!=nil{
+		for j := 0; j < *rounds; j++ {
+			key := name+"-"
+			if put[j] {
+				key += "write"
+			}else {
+				key += "read"
+			}
+			cmd := redisServer.LPush(key,tarray[j])
+			if cmd.Err()!=nil{
+				log.Fatal("Error connecting to Redis.")
+			}
+		}
+	}
+
 
 	for _, client := range servers {
 		if client != nil {
