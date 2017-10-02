@@ -20,7 +20,6 @@ data:
   addr.master: "epaxos-master"
   num.replicas: "3"
   extra.server: "-exec -dreply -e"
-  extra.client: "-q 100 -r 100 -e"
 ---
 apiVersion: apps/v1beta1
 kind: Deployment

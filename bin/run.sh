@@ -65,32 +65,32 @@ fi;
 #     	Percentage of conflicts. Defaults to 0% (default -1)
 #   -check
 #     	Check that every expected reply was received exactly once.
-#   -e	Egalitarian (no leader). Defaults to false.
+#   -e	Egalitarian (no leader). 
 #   -eps int
-#     	Send eps more messages per round than the client will wait for (to discount stragglers). Defaults to 0.
-#   -f	Fast Paxos: send message directly to all replicas. Defaults to false.
+#     	Send eps more messages per round than the client will wait for (to discount stragglers). 
+#   -f	Fast Paxos: send message directly to all replicas. 
 #   -maddr string
 #     	Master address. Defaults to localhost
 #   -mport int
-#     	Master port.  Defaults to 7077. (default 7087)
+#     	Master port.  (default 7087)
 #   -name string
 #     	Name of this client. Defaults to closest replica IP + random int
 #   -p int
-#     	GOMAXPROCS. Defaults to 2 (default 2)
+#     	GOMAXPROCS.  (default 2)
 #   -q int
-#     	Total number of requests. Defaults to 5000. (default 5000)
+#     	Total number of requests.  (default 5000)
 #   -r int
 #     	Split the total number of requests into this many rounds, and do rounds sequentially. Defaults to 1. (default 1)
 #   -raddr string
 #     	Redis address. Disabled per default.
 #   -rport int
-#     	Redis port.  Defaults to 6379. (default 6389)
+#     	Redis port. (default 6379)
 #   -s float
 #     	Zipfian s parameter (default 2)
 #   -v float
 #     	Zipfian v parameter (default 1)
 #   -w int
-#     	Percentage of updates (writes). Defaults to 100%. (default 100)
+#     	Percentage of updates (writes).  (default 100)
 
 if [ "${TYPE}" == "client" ];
 then
