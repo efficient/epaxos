@@ -72,13 +72,19 @@ fi;
 #   -maddr string
 #     	Master address. Defaults to localhost
 #   -mport int
-#     	Master port.  (default 7087)
+#     	Master port.  Defaults to 7077. (default 7087)
+#   -name string
+#     	Name of this client. Defaults to closest replica IP + random int
 #   -p int
 #     	GOMAXPROCS. Defaults to 2 (default 2)
 #   -q int
 #     	Total number of requests. Defaults to 5000. (default 5000)
 #   -r int
 #     	Split the total number of requests into this many rounds, and do rounds sequentially. Defaults to 1. (default 1)
+#   -raddr string
+#     	Redis address. Disabled per default.
+#   -rport int
+#     	Redis port.  Defaults to 6379. (default 6389)
 #   -s float
 #     	Zipfian s parameter (default 2)
 #   -v float

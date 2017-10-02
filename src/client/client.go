@@ -37,7 +37,7 @@ var conflicts *int = flag.Int("c", -1, "Percentage of conflicts. Defaults to 0%"
 var s = flag.Float64("s", 2, "Zipfian s parameter")
 var v = flag.Float64("v", 1, "Zipfian v parameter")
 var redisAddr *string = flag.String("raddr", "", "Redis address. Disabled per default.")
-var redisPort *int = flag.Int("rport", 6389, "Redis port.  Defaults to 6379.")
+var redisPort *int = flag.Int("rport", 6379, "Redis port.  Defaults to 6379.")
 
 var N int
 
