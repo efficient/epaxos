@@ -5,6 +5,7 @@ WORKDIR /app
 RUN git clone https://github.com/otrack/epaxos
 RUN GOPATH=/app/epaxos go install master
 RUN GOPATH=/app/epaxos go install server
+RUN GOPATH=/app/epaxos go get -u github.com/go-redis/redis
 RUN GOPATH=/app/epaxos go install client
 
 ENV TYPE master
