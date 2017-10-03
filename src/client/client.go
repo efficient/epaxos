@@ -119,17 +119,10 @@ func main() {
 	put := make([]bool, *reqsNb)
 	test := make([]int, *reqsNb)
 
-	if *conflicts >= 0 {
-		log.Println("Uniform distribution")
-	} else {
-		log.Println("Zipfian distribution:")
-		//fmt.Println(test[0:100])
-	}
-
 	for i := 0; i < len(rarray); i++ {
 		rarray[i] = minLeader
 		if *conflicts >= 0 {
-			r := rand.Intn(100)
+			r = rand.Intn(100)
 			if r < *conflicts {
 				karray[i] = 42
 			} else {
@@ -145,6 +138,12 @@ func main() {
 			karray[i] = int64(zipf.Uint64())
 			test[karray[i]]++
 		}
+	}
+	if *conflicts >= 0 {
+		log.Println("Uniform distribution")
+	} else {
+		log.Println("Zipfian distribution:")
+		//fmt.Println(test[0:100])
 	}
 
 	for i := 0; i < N; i++ {
