@@ -29,10 +29,8 @@ var reqsNb *int = flag.Int("q", 1000, "Total number of requests. ")
 var writes *int = flag.Int("w", 100, "Percentage of updates (writes). ")
 var noLeader *bool = flag.Bool("e", false, "Egalitarian (no leader). ")
 var fast *bool = flag.Bool("f", false, "Fast Paxos: send message directly to all replicas. ")
-var rounds *int = flag.Int("r", 1000, "Split the total number of requests into this many rounds, and do rounds sequentially. ")
 var procs *int = flag.Int("p", 2, "GOMAXPROCS. ")
 var check = flag.Bool("check", false, "Check that every expected reply was received exactly once.")
-var eps *int = flag.Int("eps", 0, "Send eps more messages per round than the client will wait for (to discount stragglers). ")
 var conflicts *int = flag.Int("c", -1, "Percentage of conflicts. Defaults to 0%")
 var s = flag.Float64("s", 2, "Zipfian s parameter")
 var v = flag.Float64("v", 1, "Zipfian v parameter")
@@ -55,7 +53,7 @@ func main() {
 	runtime.GOMAXPROCS(*procs)
 
 	randObj := rand.New(rand.NewSource(42))
-	zipf := rand.NewZipf(randObj, *s, *v, uint64(*reqsNb / *rounds + *eps))
+	zipf := rand.NewZipf(randObj, *s, *v, uint64(*reqsNb))
 
 	if *conflicts > 100 {
 		log.Fatalf("Conflicts percentage must be between 0 and 100.\n")
@@ -115,20 +113,15 @@ func main() {
 	readers := make([]*bufio.Reader, N)
 	writers := make([]*bufio.Writer, N)
 
-	rarray = make([]int, *reqsNb / *rounds + *eps)
-	tarray = make([]int64, *rounds)
-	karray := make([]int64, *reqsNb / *rounds + *eps)
-	put := make([]bool, *reqsNb / *rounds + *eps)
-	perReplicaCount := make([]int, N)
-	test := make([]int, *reqsNb / *rounds + *eps)
+	rarray = make([]int, *reqsNb)
+	tarray = make([]int64, *reqsNb)
+	karray := make([]int64, *reqsNb)
+	put := make([]bool, *reqsNb)
+	test := make([]int, *reqsNb)
 
 	for i := 0; i < len(rarray); i++ {
 		r := minLeader
 		rarray[i] = r
-		if i < *reqsNb / *rounds {
-			perReplicaCount[r]++
-		}
-
 		if *conflicts >= 0 {
 			r = rand.Intn(100)
 			if r < *conflicts {
@@ -182,62 +175,53 @@ func main() {
 
 	before_total := time.Now()
 
-	for j := 0; j < *rounds; j++ {
-
-		n := *reqsNb / *rounds
+	for j := 0; j < *reqsNb; j++ {
 
 		if *check {
-			rsp = make([]bool, n)
-			for j := 0; j < n; j++ {
+			rsp = make([]bool, j)
+			for j := 0; j < j; j++ {
 				rsp[j] = false
 			}
 		}
 
 		if *noLeader {
 			for i := 0; i < N; i++ {
-				go waitReplies(readers, i, perReplicaCount[i], done)
+				go waitReplies(readers, i, 1, done)
 			}
 		} else {
-			go waitReplies(readers, leader, n, done)
+			go waitReplies(readers, leader, 1, done)
 		}
 
 		before := time.Now()
 
-		for i := 0; i < n+*eps; i++ {
-			dlog.Printf("Sending proposal %d\n", id)
-			args.CommandId = id
-			if put[i] {
-				args.Command.Op = state.PUT
-			} else {
-				args.Command.Op = state.GET
-			}
-			args.Command.K = state.Key(karray[i])
-			args.Command.V = state.Value(i)
+		dlog.Printf("Sending proposal %d\n", id)
+		args.CommandId = id
+		if put[j] {
+			args.Command.Op = state.PUT
+		} else {
+			args.Command.Op = state.GET
+		}
+		args.Command.K = state.Key(karray[j])
+		args.Command.V = state.Value(j)
 			//args.Timestamp = time.Now().UnixNano()
-			if !*fast {
-				if *noLeader {
-					leader = rarray[i]
-				}
-				writers[leader].WriteByte(genericsmrproto.PROPOSE)
-				args.Marshal(writers[leader])
-			} else {
-				//send to everyone
-				for rep := 0; rep < N; rep++ {
-					writers[rep].WriteByte(genericsmrproto.PROPOSE)
-					args.Marshal(writers[rep])
-					writers[rep].Flush()
-				}
+		if !*fast {
+			if *noLeader {
+				leader = rarray[j]
 			}
-			//fmt.Println("Sent", id)
-			id++
-			if i%100 == 0 {
-				for i := 0; i < N; i++ {
-					writers[i].Flush()
-				}
+			writers[leader].WriteByte(genericsmrproto.PROPOSE)
+			args.Marshal(writers[leader])
+		} else {
+			//send to everyone
+			for rep := 0; rep < N; rep++ {
+				writers[rep].WriteByte(genericsmrproto.PROPOSE)
+				args.Marshal(writers[rep])
+				writers[rep].Flush()
 			}
 		}
+
+		id++
 		for i := 0; i < N; i++ {
-			writers[i].Flush()
+			writers[leader].Flush()
 		}
 
 		err := false
@@ -252,14 +236,12 @@ func main() {
 
 		after := time.Now()
 
-		fmt.Printf("Round took %v\n", after.Sub(before))
+		fmt.Printf("Delivery took %v\n", after.Sub(before))
 		tarray[j] = after.Sub(before).Nanoseconds()
 
 		if *check {
-			for j := 0; j < n; j++ {
-				if !rsp[j] {
-					fmt.Println("Didn't receive", j)
-				}
+			if !rsp[j] {
+				fmt.Println("Didn't receive", j)
 			}
 		}
 
@@ -287,7 +269,7 @@ func main() {
 	fmt.Printf("Successful: %d\n", s)
 
 	if redisServer!=nil{
-		for j := 0; j < *rounds; j++ {
+		for j := 0; j < *reqsNb; j++ {
 			key := name+"-"
 			if put[j] {
 				key += "write"
