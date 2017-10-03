@@ -94,36 +94,3 @@ spec:
             configMapKeyRef:
               name: epaxos-config
               key: extra.server
----
-apiVersion: apps/v1beta1 
-kind: Deployment
-metadata:
-  name: epaxos-client
-spec:
-  replicas: 1
-  template:
-    metadata:
-      labels:
-        app: epaxos-client
-    spec:
-      containers:
-      - name: epaxos-client
-        image: 0track/epaxos
-        env:
-        - name : TYPE
-          value: "client"
-        - name : MADDR
-          valueFrom:
-            configMapKeyRef:
-              name: epaxos-config
-              key: addr.master
-        - name : MPORT
-          valueFrom:
-            configMapKeyRef:
-              name: epaxos-config
-              key: port.master
-        - name : CLIENT_EXTRA_ARGS
-          valueFrom:
-            configMapKeyRef:
-              name: epaxos-config
-              key: extra.client

@@ -31,8 +31,8 @@ kind: Job
 metadata:
   name: epaxos-client
 spec:
-  parallelism: 3
-  completions: 3
+  parallelism: 1
+  completions: 1
   template:
     metadata:
       name: epaxos-client
@@ -55,4 +55,4 @@ spec:
                   name: epaxos-config
                   key: port.master
             - name : CLIENT_EXTRA_ARGS
-              value: "-raddr epaxos-redis -rport 6379 -q 1000 -r 1000 -e"
+              value: "-raddr epaxos-redis -rport 6379 -q 1000 -e"

@@ -66,8 +66,6 @@ fi;
 #   -check
 #     	Check that every expected reply was received exactly once.
 #   -e	Egalitarian (no leader). 
-#   -eps int
-#     	Send eps more messages per round than the client will wait for (to discount stragglers). 
 #   -f	Fast Paxos: send message directly to all replicas. 
 #   -maddr string
 #     	Master address. Defaults to localhost
@@ -78,9 +76,7 @@ fi;
 #   -p int
 #     	GOMAXPROCS.  (default 2)
 #   -q int
-#     	Total number of requests.  (default 5000)
-#   -r int
-#     	Split the total number of requests into this many rounds, and do rounds sequentially. Defaults to 1. (default 1)
+#     	Total number of requests.  (default 1000)
 #   -raddr string
 #     	Redis address. Disabled per default.
 #   -rport int

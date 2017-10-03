@@ -119,11 +119,17 @@ func main() {
 	put := make([]bool, *reqsNb)
 	test := make([]int, *reqsNb)
 
+	if *conflicts >= 0 {
+		log.Println("Uniform distribution")
+	} else {
+		log.Println("Zipfian distribution:")
+		//fmt.Println(test[0:100])
+	}
+
 	for i := 0; i < len(rarray); i++ {
-		r := minLeader
-		rarray[i] = r
+		rarray[i] = minLeader
 		if *conflicts >= 0 {
-			r = rand.Intn(100)
+			r := rand.Intn(100)
 			if r < *conflicts {
 				karray[i] = 42
 			} else {
@@ -140,12 +146,6 @@ func main() {
 			test[karray[i]]++
 		}
 	}
-	if *conflicts >= 0 {
-		fmt.Println("Uniform distribution")
-	} else {
-		fmt.Println("Zipfian distribution:")
-		//fmt.Println(test[0:100])
-	}
 
 	for i := 0; i < N; i++ {
 		var err error
@@ -156,6 +156,7 @@ func main() {
 		readers[i] = bufio.NewReader(servers[i])
 		writers[i] = bufio.NewWriter(servers[i])
 	}
+	log.Println("Connected")
 
 	successful = make([]int, N)
 	leader := 0
@@ -185,12 +186,10 @@ func main() {
 		}
 
 		if *noLeader {
-			for i := 0; i < N; i++ {
-				go waitReplies(readers, i, 1, done)
-			}
-		} else {
-			go waitReplies(readers, leader, 1, done)
+			leader = rarray[j]
 		}
+
+		go waitReplies(readers, leader, 1, done)
 
 		before := time.Now()
 
@@ -205,9 +204,6 @@ func main() {
 		args.Command.V = state.Value(j)
 			//args.Timestamp = time.Now().UnixNano()
 		if !*fast {
-			if *noLeader {
-				leader = rarray[j]
-			}
 			writers[leader].WriteByte(genericsmrproto.PROPOSE)
 			args.Marshal(writers[leader])
 		} else {
@@ -221,18 +217,12 @@ func main() {
 
 		id++
 		for i := 0; i < N; i++ {
-			writers[leader].Flush()
+			writers[i].Flush()
 		}
 
 		err := false
-		if *noLeader {
-			for i := 0; i < N; i++ {
-				e := <-done
-				err = e || err
-			}
-		} else {
-			err = <-done
-		}
+		e := <-done
+		err = e || err
 
 		after := time.Now()
 
