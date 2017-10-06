@@ -94,6 +94,8 @@ func main() {
 				minLeader = i
 				minLatency = latency
 			}
+		}else{
+			log.Fatal("cannot connect to "+rlReply.ReplicaList[i])
 		}
 	}
 
