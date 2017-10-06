@@ -6,6 +6,8 @@ import (
 	"flag"
 	"fmt"
 	"genericsmrproto"
+	"github.com/go-redis/redis"
+	"github.com/google/uuid"
 	"log"
 	"masterproto"
 	"math/rand"
@@ -20,9 +22,7 @@ import (
 	"strconv"
 )
 
-import "github.com/go-redis/redis"
-
-var name string = *flag.String("name", "", "Name of this client. Defaults to closest replica IP + random int")
+var clientId string = *flag.String("id", "", "the id of the client. Default is RFC 4122 nodeID.")
 var masterAddr *string = flag.String("maddr", "", "Master address. Defaults to localhost")
 var masterPort *int = flag.Int("mport", 7087, "Master port. ")
 var reqsNb *int = flag.Int("q", 1000, "Total number of requests. ")
@@ -32,8 +32,6 @@ var fast *bool = flag.Bool("f", false, "Fast Paxos: send message directly to all
 var procs *int = flag.Int("p", 2, "GOMAXPROCS. ")
 var check = flag.Bool("check", false, "Check that every expected reply was received exactly once.")
 var conflicts *int = flag.Int("c", -1, "Percentage of conflicts. Defaults to 0%")
-var s = flag.Float64("s", 2, "Zipfian s parameter")
-var v = flag.Float64("v", 1, "Zipfian v parameter")
 var redisAddr *string = flag.String("raddr", "", "Redis address. Disabled per default.")
 var redisPort *int = flag.Int("rport", 6379, "Redis port.")
 
@@ -51,9 +49,6 @@ func main() {
 	flag.Parse()
 
 	runtime.GOMAXPROCS(*procs)
-
-	randObj := rand.New(rand.NewSource(42))
-	zipf := rand.NewZipf(randObj, *s, *v, uint64(*reqsNb))
 
 	if *conflicts > 100 {
 		log.Fatalf("Conflicts percentage must be between 0 and 100.\n")
@@ -103,11 +98,12 @@ func main() {
 	}
 
 	log.Printf("node list %v, closest = (%v,%vms)",rlReply.ReplicaList,minLeader,minLatency)
-	if name == "" {
-		rand.Seed(time.Now().Unix())
-		name = "client-"+strconv.FormatUint(rand.Uint64(),16)+"-"+rlReply.ReplicaList[minLeader]
+
+	if clientId == "" {
+		clientId = uuid.New().String()
 	}
-	log.Printf(name)
+
+	log.Printf("client: %v",clientId)
 
 	servers := make([]net.Conn, N)
 	readers := make([]*bufio.Reader, N)
@@ -115,17 +111,10 @@ func main() {
 
 	rarray = make([]int, *reqsNb)
 	tarray = make([]int64, *reqsNb)
-	karray := make([]int64, *reqsNb)
+	karray := make([]uint64, *reqsNb)
 	put := make([]bool, *reqsNb)
-	test := make([]int, *reqsNb)
 
-	if *conflicts >= 0 {
-		log.Println("Uniform distribution")
-	} else {
-		log.Println("Zipfian distribution:")
-		//fmt.Println(test[0:100])
-	}
-
+	clientKey := uint64(uuid.New().Time()) // a command id unique to this client.
 	for i := 0; i < len(rarray); i++ {
 		rarray[i] = minLeader
 		if *conflicts >= 0 {
@@ -133,7 +122,7 @@ func main() {
 			if r < *conflicts {
 				karray[i] = 42
 			} else {
-				karray[i] = int64(43 + i)
+				karray[i] = clientKey
 			}
 			r = rand.Intn(100)
 			if r < *writes {
@@ -142,8 +131,7 @@ func main() {
 				put[i] = false
 			}
 		} else {
-			karray[i] = int64(zipf.Uint64())
-			test[karray[i]]++
+			karray[i] = clientKey
 		}
 	}
 
@@ -178,6 +166,8 @@ func main() {
 
 	for j := 0; j < *reqsNb; j++ {
 
+		cmdString := ""
+
 		if *check {
 			rsp = make([]bool, j)
 			for j := 0; j < j; j++ {
@@ -197,12 +187,15 @@ func main() {
 		args.CommandId = id
 		if put[j] {
 			args.Command.Op = state.PUT
+			cmdString+="PUT"
 		} else {
 			args.Command.Op = state.GET
+			cmdString+="GET"
 		}
 		args.Command.K = state.Key(karray[j])
 		args.Command.V = state.Value(j)
-			//args.Timestamp = time.Now().UnixNano()
+		cmdString+="("+strconv.FormatUint(karray[j],16)+")"
+
 		if !*fast {
 			writers[leader].WriteByte(genericsmrproto.PROPOSE)
 			args.Marshal(writers[leader])
@@ -226,7 +219,10 @@ func main() {
 
 		after := time.Now()
 
-		fmt.Printf("Delivery took %v\n", after.Sub(before))
+		fmt.Printf("%v: %v \n",
+			cmdString,
+			after.Sub(before))
+
 		tarray[j] = after.Sub(before).Nanoseconds()
 
 		if *check {
@@ -260,7 +256,7 @@ func main() {
 
 	if redisServer!=nil{
 		for j := 0; j < *reqsNb; j++ {
-			key := name+"-"
+			key := clientId +"-"
 			if put[j] {
 				key += "write"
 			}else {
