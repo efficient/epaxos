@@ -34,6 +34,7 @@ type Beacon struct {
 
 type Replica struct {
 	N            int        // total number of replicas
+	F            int        // maximal number of failures
 	Id           int32      // the ID of the current replica
 	PeerAddrList []string   // array with the IP:port address of every replica
 	Peers        []net.Conn // cache of connections to all other replicas
@@ -67,9 +68,11 @@ type Replica struct {
 	OnClientConnect chan bool
 }
 
+
 func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply bool) *Replica {
 	r := &Replica{
 		len(peerAddrList),
+		(len(peerAddrList)+1)/2,
 		int32(id),
 		peerAddrList,
 		make([]net.Conn, len(peerAddrList)),
@@ -127,26 +130,48 @@ func (r *Replica) ConnectToPeers() {
 	go r.waitForPeerConnections(done)
 
 	//connect to peers
-	for i := 0; i < int(r.Id); i++ {
-		for done := false; !done; {
-			if conn, err := net.Dial("tcp", r.PeerAddrList[i]); err == nil {
-				r.Peers[i] = conn
-				done = true
-			} else {
-				time.Sleep(1e9)
+	latencies := make([]time.Duration,r.N)
+	for i := 0; i < r.N; i++ {
+		if int32(i) == r.Id{
+			latencies[i] = 0
+		}else {
+			before := time.Now()
+			for done := false; !done; {
+				if conn, err := net.Dial("tcp", r.PeerAddrList[i]); err == nil {
+					r.Peers[i] = conn
+					done = true
+				} else {
+					time.Sleep(1e9)
+				}
 			}
+			latencies[i] = time.Now().Sub(before)
+			log.Printf("%v -> %v", i, latencies[i])
+			binary.LittleEndian.PutUint32(bs, uint32(r.Id))
+			if _, err := r.Peers[i].Write(bs); err != nil {
+				fmt.Println("Write id error:", err)
+				continue
+			}
+			r.Alive[i] = true
+			r.PeerReaders[i] = bufio.NewReader(r.Peers[i])
+			r.PeerWriters[i] = bufio.NewWriter(r.Peers[i])
 		}
-		binary.LittleEndian.PutUint32(bs, uint32(r.Id))
-		if _, err := r.Peers[i].Write(bs); err != nil {
-			fmt.Println("Write id error:", err)
-			continue
-		}
-		r.Alive[i] = true
-		r.PeerReaders[i] = bufio.NewReader(r.Peers[i])
-		r.PeerWriters[i] = bufio.NewWriter(r.Peers[i])
 	}
 	<-done
 	log.Printf("Replica id: %d. Done connecting to peers\n", r.Id)
+	log.Printf("Node list %v", r.PeerAddrList)
+
+	quorum := make([]int32,r.N)
+	for i:=0; i<r.N; i++ {
+		pos := 0
+		for j:=0; j<r.N; j++ {
+			if (latencies[j] < latencies[i]) || ((latencies[j] == latencies[i]) && (j < i)) {
+				pos++
+			}
+		}
+		quorum[pos] = int32(i)
+	}
+	log.Println("Preferred quorum: ", quorum)
+	r.UpdatePreferredPeerOrder(quorum)
 
 	for rid, reader := range r.PeerReaders {
 		if int32(rid) == r.Id {
