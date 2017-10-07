@@ -1,9 +1,16 @@
 EPaxos
 ======
 
+Fixes/Changes
+- add docker & kubernetes files 
+- a fast path now correctly asks for f + (f+1)/2 processes (and no more a majority)
+- quorum now consists of the closest (alive) replicas
+
+
+
+Taken from https://github.com/efficient/epaxos
 
 ### What is EPaxos?
-
 
 EPaxos is an efficient, leaderless replication protocol. The name stands for *Egalitarian Paxos* -- EPaxos is based
 on the Paxos consensus algorithm. As such, it can tolerate up to F concurrent replica failures with 2F+1 total replicas.
