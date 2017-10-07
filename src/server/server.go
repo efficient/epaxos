@@ -102,8 +102,6 @@ func registerWithMaster(masterAddr string) (int, []string) {
 		}
 		time.Sleep(1e9)
 	}
-	
-	log.Printf("node list %v", reply.NodeList)
 
 	return reply.ReplicaId, reply.NodeList
 }

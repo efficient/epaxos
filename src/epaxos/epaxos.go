@@ -118,9 +118,9 @@ type LeaderBookkeeping struct {
 	tpaOKs            int
 }
 
-func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply bool, beacon bool, durable bool) *Replica {
+func NewReplica(id int, peerAddrList []string, thrifty bool, execute bool, dreply bool, beacon bool, durable bool) *Replica {
 	r := &Replica{
-		genericsmr.NewReplica(id, peerAddrList, thrifty, exec, dreply),
+		genericsmr.NewReplica(id, peerAddrList, thrifty, execute, dreply),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
@@ -280,14 +280,14 @@ func (r *Replica) run() {
 		go r.executeCommands()
 	}
 
-	if r.Id == 0 {
-		//init quorum read lease
-		quorum := make([]int32, r.N/2+1)
-		for i := 0; i <= r.N/2; i++ {
-			quorum[i] = int32(i)
-		}
-		r.UpdatePreferredPeerOrder(quorum)
-	}
+	//if r.Id == 0 {
+	//	//init quorum read lease
+	//	quorum := make([]int32, r.N/2+1)
+	//	for i := 0; i <= r.N/2; i++ {
+	//		quorum[i] = int32(i)
+	//	}
+	//	r.UpdatePreferredPeerOrder(quorum)
+	//}
 
 	slowClockChan = make(chan bool, 1)
 	fastClockChan = make(chan bool, 1)
@@ -1047,7 +1047,7 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 	}
 
 	//can we commit on the fast path?
-	if inst.lb.preAcceptOKs >= r.N/2 && inst.lb.allEqual && allCommitted && isInitialBallot(inst.ballot) {
+	if inst.lb.preAcceptOKs >= (r.F + (r.F+1)/2 - 1) && inst.lb.allEqual && allCommitted && isInitialBallot(inst.ballot) {
 		happy++
 		dlog.Printf("Fast path for instance %d.%d\n", pareply.Replica, pareply.Instance)
 		r.InstanceSpace[pareply.Replica][pareply.Instance].Status = epaxosproto.COMMITTED
@@ -1109,7 +1109,7 @@ func (r *Replica) handlePreAcceptOK(pareply *epaxosproto.PreAcceptOK) {
 	}
 
 	//can we commit on the fast path?
-	if inst.lb.preAcceptOKs >= r.N/2 && inst.lb.allEqual && allCommitted && isInitialBallot(inst.ballot) {
+	if inst.lb.preAcceptOKs >= (r.F + (r.F+1)/2 - 1) && inst.lb.allEqual && allCommitted && isInitialBallot(inst.ballot) {
 		happy++
 		r.InstanceSpace[r.Id][pareply.Instance].Status = epaxosproto.COMMITTED
 		r.updateCommitted(r.Id)
