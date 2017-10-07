@@ -27,6 +27,7 @@ var masterAddr *string = flag.String("maddr", "", "Master address. Defaults to l
 var masterPort *int = flag.Int("mport", 7087, "Master port. ")
 var reqsNb *int = flag.Int("q", 1000, "Total number of requests. ")
 var writes *int = flag.Int("w", 100, "Percentage of updates (writes). ")
+var psize *int = flag.Int("psize", 100, "Payload size for writes.")
 var noLeader *bool = flag.Bool("e", false, "Egalitarian (no leader). ")
 var fast *bool = flag.Bool("f", false, "Fast Paxos: send message directly to all replicas. ")
 var procs *int = flag.Int("p", 2, "GOMAXPROCS. ")
@@ -34,6 +35,7 @@ var check = flag.Bool("check", false, "Check that every expected reply was recei
 var conflicts *int = flag.Int("c", -1, "Percentage of conflicts. Defaults to 0%")
 var redisAddr *string = flag.String("raddr", "", "Redis address. Disabled per default.")
 var redisPort *int = flag.Int("rport", 6379, "Redis port.")
+var verbose *bool = flag.Bool("v", false, "verbose mode. ")
 
 var N int
 
@@ -113,10 +115,10 @@ func main() {
 
 	rarray = make([]int, *reqsNb)
 	tarray = make([]int64, *reqsNb)
-	karray := make([]uint64, *reqsNb)
+	karray := make([]state.Key, *reqsNb)
 	put := make([]bool, *reqsNb)
 
-	clientKey := uint64(uuid.New().Time()) // a command id unique to this client.
+	clientKey := state.Key(uint64(uuid.New().Time())) // a command id unique to this client.
 	for i := 0; i < len(rarray); i++ {
 		rarray[i] = minLeader
 		if *conflicts >= 0 {
@@ -161,8 +163,8 @@ func main() {
 	}
 
 	var id int32 = 0
-	done := make(chan bool, N)
-	args := genericsmrproto.Propose{id, state.Command{state.PUT, 0, 0}, 0}
+	done := make(chan *state.Value, N)
+	args := genericsmrproto.Propose{id, state.Command{state.PUT, 0, nil}, 0}
 
 	before_total := time.Now()
 
@@ -187,16 +189,25 @@ func main() {
 
 		dlog.Printf("Sending proposal %d\n", id)
 		args.CommandId = id
+		args.Command.K = state.Key(karray[j])
 		if put[j] {
 			args.Command.Op = state.PUT
-			cmdString+="PUT"
+			args.Command.V = state.Value(make([]byte,*psize))
+			cmdString="PUT("
+			if *verbose {
+				cmdString += karray[j].String()
+				cmdString += ","
+				cmdString += args.Command.V.String()
+			}
+			cmdString+=")"
 		} else {
 			args.Command.Op = state.GET
-			cmdString+="GET"
+			cmdString+="GET("
+			if *verbose{
+				cmdString+=karray[j].String()
+			}
+			cmdString+=")"
 		}
-		args.Command.K = state.Key(karray[j])
-		args.Command.V = state.Value(j)
-		cmdString+="("+strconv.FormatUint(karray[j],16)+")"
 
 		if !*fast {
 			writers[leader].WriteByte(genericsmrproto.PROPOSE)
@@ -216,8 +227,11 @@ func main() {
 		}
 
 		err := false
-		e := <-done
-		err = e || err
+		value := <-done
+		err = value ==nil || err
+		if !err && *verbose{
+			cmdString+= value.String()
+		}
 
 		after := time.Now()
 
@@ -283,16 +297,16 @@ func main() {
 	master.Close()
 }
 
-func waitReplies(readers []*bufio.Reader, leader int, n int, done chan bool) {
-	e := false
-
+func waitReplies(readers []*bufio.Reader, leader int, n int, done chan *state.Value) {
+	var e *state.Value
+	e = nil
 	reply := new(genericsmrproto.ProposeReplyTS)
 	for i := 0; i < n; i++ {
 		if err := reply.Unmarshal(readers[leader]); err != nil {
 			fmt.Println("Error when reading:", err)
-			e = true
 			continue
 		}
+		e = &reply.Value
 		//fmt.Println(reply.Value)
 		if *check {
 			if rsp[reply.CommandId] {

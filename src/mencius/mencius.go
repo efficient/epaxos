@@ -466,7 +466,7 @@ func (r *Replica) handlePrepare(prepare *menciusproto.Prepare) {
 			-1,
 			FALSE,
 			0,
-			state.Command{state.NONE, 0, 0}})
+			state.Command{state.NONE, 0, state.NIL()}})
 
 		r.instanceSpace[prepare.Instance] = &Instance{false,
 			0,
@@ -480,7 +480,7 @@ func (r *Replica) handlePrepare(prepare *menciusproto.Prepare) {
 			ok = FALSE
 		}
 		if inst.command == nil {
-			inst.command = &state.Command{state.NONE, 0, 0}
+			inst.command = &state.Command{state.NONE, 0, state.NIL()}
 		}
 		skipped := FALSE
 		if inst.skipped {
@@ -770,7 +770,7 @@ func (r *Replica) updateBlocking(instance int32) {
 				if inst.lb.clientProposal != nil && !r.Dreply {
 					// give client the all clear
 					dlog.Printf("Sending ACK for req. %d\n", inst.lb.clientProposal.CommandId)
-					r.ReplyProposeTS(&genericsmrproto.ProposeReplyTS{TRUE, inst.lb.clientProposal.CommandId, state.NIL, inst.lb.clientProposal.Timestamp},
+					r.ReplyProposeTS(&genericsmrproto.ProposeReplyTS{TRUE, inst.lb.clientProposal.CommandId, state.NIL(), inst.lb.clientProposal.Timestamp},
 						inst.lb.clientProposal.Reply)
 				}
 				skip := FALSE
@@ -858,7 +858,7 @@ func (r *Replica) executeCommands() {
 
 			if r.Dreply && inst.lb != nil && inst.lb.clientProposal != nil {
 				dlog.Printf("Sending ACK for req. %d\n", inst.lb.clientProposal.CommandId)
-				r.ReplyProposeTS(&genericsmrproto.ProposeReplyTS{TRUE, inst.lb.clientProposal.CommandId, state.NIL, inst.lb.clientProposal.Timestamp},
+				r.ReplyProposeTS(&genericsmrproto.ProposeReplyTS{TRUE, inst.lb.clientProposal.CommandId, state.NIL(), inst.lb.clientProposal.Timestamp},
 					inst.lb.clientProposal.Reply)
 			}
 			inst.status = EXECUTED
@@ -885,7 +885,7 @@ func (r *Replica) forceCommit() {
 		if r.instanceSpace[problemInstance] == nil {
 			r.instanceSpace[problemInstance] = &Instance{true,
 				NB_INST_TO_SKIP,
-				&state.Command{state.NONE, 0, 0},
+				&state.Command{state.NONE, 0, state.NIL()},
 				r.makeUniqueBallot(1),
 				PREPARING,
 				&LeaderBookkeeping{nil, 0, 0, 0, 0}}

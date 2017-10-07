@@ -5,6 +5,8 @@ import (
 	//"fmt"
 	//"code.google.com/p/leveldb-go/leveldb"
 	//"encoding/binary"
+	"encoding/hex"
+	"strconv"
 )
 
 type Operation uint8
@@ -18,9 +20,9 @@ const (
 	WLOCK
 )
 
-type Value int64
+type Value []byte
 
-const NIL Value = 0
+func NIL() Value {return Value([]byte{})}
 
 type Key int64
 
@@ -99,5 +101,14 @@ func (c *Command) Execute(st *State) Value {
 		}
 	}
 
-	return NIL
+	return nil
 }
+
+func (t *Value) String() string{
+	return hex.EncodeToString(*t)
+}
+
+func (t *Key) String() string{
+	return strconv.FormatInt(int64(*t), 16)
+}
+

@@ -155,7 +155,7 @@ func (r *Replica) handleReplicaConnection(rid int, reader *bufio.Reader) error {
 				cmd.Unmarshal(reader)
 				r.commandsMutex.Lock()
 				if _, present := r.commands[cid]; !present {
-					if cmd.Op != 0 || cmd.K != 0 || cmd.V != 0 {
+					if cmd.Op != 0 || cmd.K != 0 || len(cmd.V) == 0 {
 						r.commands[cid] = cmd
 					}
 				}
@@ -218,7 +218,7 @@ func (r *Replica) replyPrepare(reply *gpaxosproto.PrepareReply, w *bufio.Writer)
 func (r *Replica) send1b(msg *gpaxosproto.M_1b, w *bufio.Writer) {
 	w.WriteByte(gpaxosproto.M1B)
 	msg.Marshal(w)
-	dummy := state.Command{0, 0, 0}
+	dummy := state.Command{0, 0, state.NIL()}
 	for _, cid := range msg.Cstruct {
 		if cmd, present := r.commands[cid]; present {
 			cmd.Marshal(w)
@@ -566,7 +566,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 
 	if !r.isLeader && r.crtBalnum < 0 {
 		log.Println("Received request before leader 1a message")
-		r.ReplyProposeTS(&genericsmrproto.ProposeReplyTS{FALSE, -1, state.NIL, propose.Timestamp}, propose.Reply)
+		r.ReplyProposeTS(&genericsmrproto.ProposeReplyTS{FALSE, -1, state.NIL(), propose.Timestamp}, propose.Reply)
 		return
 	}
 
@@ -574,7 +574,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 
 	if _, present := r.committed[propose.CommandId]; present {
 		if r.isLeader || ALL_TO_ALL {
-			r.ReplyProposeTS(&genericsmrproto.ProposeReplyTS{TRUE, propose.CommandId, state.NIL, propose.Timestamp}, propose.Reply)
+			r.ReplyProposeTS(&genericsmrproto.ProposeReplyTS{TRUE, propose.CommandId, state.NIL(), propose.Timestamp}, propose.Reply)
 		}
 		return
 	} else {
@@ -767,7 +767,7 @@ func (r *Replica) tryToLearn() {
 			r.committed[cid] = true
 			crtbal.lb.committed++
 			if prop, present := r.commandReplies[cid]; present {
-				r.ReplyProposeTS(&genericsmrproto.ProposeReplyTS{TRUE, cid, state.NIL, prop.Timestamp}, prop.Reply)
+				r.ReplyProposeTS(&genericsmrproto.ProposeReplyTS{TRUE, cid, state.NIL(), prop.Timestamp}, prop.Reply)
 				delete(r.commandReplies, cid)
 			}
 		}
