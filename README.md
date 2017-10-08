@@ -1,11 +1,12 @@
 EPaxos
 ======
 
+based on efficient/epaxos -> morethan5
+
 Fixes/Changes
 - add docker & kubernetes files 
-- a fast path in EPaxos now correctly asks for f + (f+1)/2 processes (and no more a majority)
-- quorum now consists of the closest (alive) replicas
 - add payload for commands
+- quorum now consists of the closest (alive) replicas
 
 Taken from https://github.com/efficient/epaxos
 
