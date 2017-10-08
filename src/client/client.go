@@ -164,7 +164,7 @@ func main() {
 
 	var id int32 = 0
 	done := make(chan *state.Value, N)
-	args := genericsmrproto.Propose{id, state.Command{state.PUT, 0, nil}, 0}
+	args := genericsmrproto.Propose{id, state.Command{state.PUT, 0, state.NIL()}, 0}
 
 	before_total := time.Now()
 

@@ -13,6 +13,7 @@ import (
 	"rdtsc"
 	"state"
 	"time"
+	"sync"
 )
 
 const CHAN_BUFFER_SIZE = 200000
@@ -34,7 +35,6 @@ type Beacon struct {
 
 type Replica struct {
 	N            int        // total number of replicas
-	F            int        // maximal number of failures
 	Id           int32      // the ID of the current replica
 	PeerAddrList []string   // array with the IP:port address of every replica
 	Peers        []net.Conn // cache of connections to all other replicas
@@ -66,13 +66,13 @@ type Replica struct {
 	Ewma []float64
 
 	OnClientConnect chan bool
-}
 
+	mutex sync.Mutex
+}
 
 func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply bool) *Replica {
 	r := &Replica{
 		len(peerAddrList),
-		(len(peerAddrList)+1)/2,
 		int32(id),
 		peerAddrList,
 		make([]net.Conn, len(peerAddrList)),
@@ -94,7 +94,8 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply b
 		make(map[uint8]*RPCPair),
 		genericsmrproto.GENERIC_SMR_BEACON_REPLY + 1,
 		make([]float64, len(peerAddrList)),
-		make(chan bool, 100)}
+		make(chan bool, 100),
+		sync.Mutex{}}
 
 	var err error
 
@@ -130,48 +131,29 @@ func (r *Replica) ConnectToPeers() {
 	go r.waitForPeerConnections(done)
 
 	//connect to peers
-	latencies := make([]time.Duration,r.N)
-	for i := 0; i < r.N; i++ {
-		if int32(i) == r.Id{
-			latencies[i] = 0
-		}else {
-			before := time.Now()
-			for done := false; !done; {
-				if conn, err := net.Dial("tcp", r.PeerAddrList[i]); err == nil {
-					r.Peers[i] = conn
-					done = true
-				} else {
-					time.Sleep(1e9)
-				}
+	for i := 0; i < int(r.Id); i++ {
+		for done := false; !done; {
+			if conn, err := net.Dial("tcp", r.PeerAddrList[i]); err == nil {
+				r.Peers[i] = conn
+				done = true
+			} else {
+				time.Sleep(1e9)
 			}
-			latencies[i] = time.Now().Sub(before)
-			log.Printf("%v -> %v", i, latencies[i])
-			binary.LittleEndian.PutUint32(bs, uint32(r.Id))
-			if _, err := r.Peers[i].Write(bs); err != nil {
-				fmt.Println("Write id error:", err)
-				continue
-			}
-			r.Alive[i] = true
-			r.PeerReaders[i] = bufio.NewReader(r.Peers[i])
-			r.PeerWriters[i] = bufio.NewWriter(r.Peers[i])
 		}
+		binary.LittleEndian.PutUint32(bs, uint32(r.Id))
+		if _, err := r.Peers[i].Write(bs); err != nil {
+			fmt.Println("Write id error:", err)
+			continue
+		}
+		r.Alive[i] = true
+		r.PeerReaders[i] = bufio.NewReader(r.Peers[i])
+		r.PeerWriters[i] = bufio.NewWriter(r.Peers[i])
 	}
 	<-done
 	log.Printf("Replica id: %d. Done connecting to peers\n", r.Id)
 	log.Printf("Node list %v", r.PeerAddrList)
 
-	quorum := make([]int32,r.N)
-	for i:=0; i<r.N; i++ {
-		pos := 0
-		for j:=0; j<r.N; j++ {
-			if (latencies[j] < latencies[i]) || ((latencies[j] == latencies[i]) && (j < i)) {
-				pos++
-			}
-		}
-		quorum[pos] = int32(i)
-	}
-	log.Println("Preferred quorum: ", quorum)
-	r.UpdatePreferredPeerOrder(quorum)
+	go r.UpdateClosestQuorum()
 
 	for rid, reader := range r.PeerReaders {
 		if int32(rid) == r.Id {
@@ -278,8 +260,9 @@ func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
 				break
 			}
 			//TODO: UPDATE STUFF
+			r.mutex.Lock()
 			r.Ewma[rid] = 0.99*r.Ewma[rid] + 0.01*float64(rdtsc.Cputicks()-gbeaconReply.Timestamp)
-			log.Println(r.Ewma)
+			r.mutex.Unlock()
 			break
 
 		default:
@@ -418,4 +401,39 @@ func (r *Replica) UpdatePreferredPeerOrder(quorum []int32) {
 	}
 
 	r.PreferredPeerOrder = aux
+}
+
+func (r *Replica) UpdateClosestQuorum() {
+
+	for !r.Shutdown {
+
+		for i := 0; i < r.N; i++ {
+			if i == int(r.Id) {
+				continue
+			}
+			if r.Alive[i] {
+				r.SendBeacon(int32(i))
+			}
+		}
+
+		time.Sleep(1 * time.Second)
+		quorum := make([]int32, r.N)
+
+		r.mutex.Lock()
+		for i := 0; i < r.N; i++ {
+			pos := 0
+			for j := 0; j < r.N; j++ {
+				if (r.Ewma[j] < r.Ewma[i]) || ((r.Ewma[j] == r.Ewma[i]) && (j < i)) {
+					pos++
+				}
+			}
+			quorum[pos] = int32(i)
+		}
+		r.mutex.Unlock()
+
+		r.UpdatePreferredPeerOrder(quorum)
+		log.Println("Closest quorum: ", quorum)
+		time.Sleep(10* time.Second)
+
+	}
 }

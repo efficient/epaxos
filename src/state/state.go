@@ -101,7 +101,7 @@ func (c *Command) Execute(st *State) Value {
 		}
 	}
 
-	return nil
+	return NIL()
 }
 
 func (t *Value) String() string{

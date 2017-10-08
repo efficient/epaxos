@@ -1,31 +1,3 @@
-apiVersion: v1
-kind: Service
-metadata:
-  name: epaxos-redis
-  labels:
-    app: epaxos-redis
-spec:
-  type: NodePort
-  ports:
-  - port: 6379
-  selector:
-    app: epaxos-redis
----
-apiVersion: apps/v1beta1
-kind: Deployment
-metadata:
-  name: epaxos-redis
-spec:
-  replicas: 1
-  template:
-    metadata:
-      labels:
-        app: epaxos-redis
-    spec:
-      containers:
-      - name: epaxos-redis
-        image: redis
----
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -55,4 +27,4 @@ spec:
                   name: epaxos-config
                   key: port.master
             - name : CLIENT_EXTRA_ARGS
-              value: "-raddr epaxos-redis -rport 6379 -q 1000 -e"
+              value: "-v -q 1 -w 50 -c 50 -e"
