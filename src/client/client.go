@@ -192,7 +192,9 @@ func main() {
 		args.Command.K = state.Key(karray[j])
 		if put[j] {
 			args.Command.Op = state.PUT
-			args.Command.V = state.Value(make([]byte,*psize))
+			value :=make([]byte,*psize)
+			rand.Read(value)
+			args.Command.V = state.Value(value)
 			cmdString="PUT("
 			if *verbose {
 				cmdString += karray[j].String()
