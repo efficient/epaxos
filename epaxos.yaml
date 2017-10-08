@@ -19,7 +19,7 @@ data:
   port.server: "7001"
   addr.master: "epaxos-master"
   num.replicas: "3"
-  extra.server: "-exec -dreply -e -thrifty"
+  extra.server: "-e"
 ---
 apiVersion: apps/v1beta1
 kind: Deployment

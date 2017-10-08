@@ -27,4 +27,4 @@ spec:
                   name: epaxos-config
                   key: port.master
             - name : CLIENT_EXTRA_ARGS
-              value: "-v -q 1 -w 50 -c 50 -e"
+              value: "-v -q 1000 -w 50 -c 50 -e"
