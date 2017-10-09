@@ -121,19 +121,20 @@ func main() {
 	clientKey := state.Key(uint64(uuid.New().Time())) // a command id unique to this client.
 	for i := 0; i < len(rarray); i++ {
 		rarray[i] = minLeader
+		r := rand.Intn(100)
+		if r < *writes {
+			put[i] = true
+		} else {
+			put[i] = false
+		}
 		if *conflicts >= 0 {
-			r := rand.Intn(100)
+			r = rand.Intn(100)
 			if r < *conflicts {
 				karray[i] = 42
 			} else {
 				karray[i] = clientKey
 			}
 			r = rand.Intn(100)
-			if r < *writes {
-				put[i] = true
-			} else {
-				put[i] = false
-			}
 		} else {
 			karray[i] = clientKey
 		}
