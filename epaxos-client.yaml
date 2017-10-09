@@ -3,8 +3,8 @@ kind: Job
 metadata:
   name: epaxos-client
 spec:
-  parallelism: 3
-  completions: 3
+  parallelism: 5
+  completions: 5
   template:
     metadata:
       name: epaxos-client
@@ -27,4 +27,4 @@ spec:
                   name: epaxos-config
                   key: port.master
             - name : CLIENT_EXTRA_ARGS
-              value: "-v -q 1000 -w 50 -c 50 -e"
+              value: "-q 10000 -w 100 -c 0 -psize 0 -e"

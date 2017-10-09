@@ -405,35 +405,32 @@ func (r *Replica) UpdatePreferredPeerOrder(quorum []int32) {
 
 func (r *Replica) UpdateClosestQuorum() {
 
-	for !r.Shutdown {
-
-		for i := 0; i < r.N; i++ {
-			if i == int(r.Id) {
-				continue
-			}
-			if r.Alive[i] {
-				r.SendBeacon(int32(i))
-			}
+	for i := 0; i < r.N; i++ {
+		if i == int(r.Id) {
+			continue
 		}
-
-		time.Sleep(1 * time.Second)
-		quorum := make([]int32, r.N)
-
-		r.mutex.Lock()
-		for i := 0; i < r.N; i++ {
-			pos := 0
-			for j := 0; j < r.N; j++ {
-				if (r.Ewma[j] < r.Ewma[i]) || ((r.Ewma[j] == r.Ewma[i]) && (j < i)) {
-					pos++
-				}
-			}
-			quorum[pos] = int32(i)
+		if r.Alive[i] {
+			r.SendBeacon(int32(i))
 		}
-		r.mutex.Unlock()
-
-		r.UpdatePreferredPeerOrder(quorum)
-		log.Println("Closest quorum: ", quorum)
-		time.Sleep(10* time.Second)
-
 	}
+
+	time.Sleep(1 * time.Second)
+	quorum := make([]int32, r.N)
+
+	r.mutex.Lock()
+	for i := 0; i < r.N; i++ {
+		pos := 0
+		for j := 0; j < r.N; j++ {
+			if (r.Ewma[j] < r.Ewma[i]) || ((r.Ewma[j] == r.Ewma[i]) && (j < i)) {
+				pos++
+			}
+		}
+		quorum[pos] = int32(i)
+	}
+	r.mutex.Unlock()
+
+	r.UpdatePreferredPeerOrder(quorum)
+	log.Println("Closest quorum: ", quorum)
+	time.Sleep(10 * time.Second)
+
 }
