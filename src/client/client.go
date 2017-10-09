@@ -122,14 +122,14 @@ func main() {
 	for i := 0; i < len(rarray); i++ {
 		rarray[i] = minLeader
 		r := rand.Intn(100)
-		if r < *writes {
+		if r <= *writes {
 			put[i] = true
 		} else {
 			put[i] = false
 		}
 		if *conflicts >= 0 {
 			r = rand.Intn(100)
-			if r < *conflicts {
+			if r <= *conflicts {
 				karray[i] = 42
 			} else {
 				karray[i] = clientKey
