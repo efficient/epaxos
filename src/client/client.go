@@ -32,7 +32,7 @@ var noLeader *bool = flag.Bool("e", false, "Egalitarian (no leader). ")
 var fast *bool = flag.Bool("f", false, "Fast Paxos: send message directly to all replicas. ")
 var procs *int = flag.Int("p", 2, "GOMAXPROCS. ")
 var check = flag.Bool("check", false, "Check that every expected reply was received exactly once.")
-var conflicts *int = flag.Int("c", -1, "Percentage of conflicts. Defaults to 0%")
+var conflicts *int = flag.Int("c", 0, "Percentage of conflicts. Defaults to 0%")
 var redisAddr *string = flag.String("raddr", "", "Redis address. Disabled per default.")
 var redisPort *int = flag.Int("rport", 6379, "Redis port.")
 var verbose *bool = flag.Bool("v", false, "verbose mode. ")
@@ -127,7 +127,7 @@ func main() {
 		} else {
 			put[i] = false
 		}
-		if *conflicts >= 0 {
+		if *conflicts > 0 {
 			r = rand.Intn(100)
 			if r <= *conflicts {
 				karray[i] = 42

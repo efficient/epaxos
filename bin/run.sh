@@ -34,12 +34,12 @@ fi;
 #   -cpuprofile string
 #     	write cpu profile to file
 #   -dreply
-#     	Reply to client only after command has been executed.
+#     	Reply to client only after command has been executed. (default true)
 #   -durable
 #     	Log to a stable store (i.e., a file in the current dir).
 #   -e	Use EPaxos as the replication protocol. Defaults to false.
 #   -exec
-#     	Execute commands.
+#     	Execute commands. (default true)
 #   -g	Use Generalized Paxos as the replication protocol. Defaults to false.
 #   -m	Use Mencius as the replication protocol. Defaults to false.
 #   -maddr string
@@ -51,7 +51,8 @@ fi;
 #   -port int
 #     	Port # to listen on. Defaults to 7070 (default 7070)
 #   -thrifty
-#     	Use only as many messages as strictly required for inter-replica communication.
+#     	Use only as many messages as strictly required for inter-replica communication. (default true)
+
 
 if [ "${TYPE}" == "server" ];
 then
@@ -62,31 +63,31 @@ fi;
 
 # Usage of ./bin/client:
 #   -c int
-#     	Percentage of conflicts. Defaults to 0% (default -1)
+#     	Percentage of conflicts. Defaults to 0%
 #   -check
 #     	Check that every expected reply was received exactly once.
 #   -e	Egalitarian (no leader). 
 #   -f	Fast Paxos: send message directly to all replicas. 
+#   -id string
+#     	the id of the client. Default is RFC 4122 nodeID.
 #   -maddr string
 #     	Master address. Defaults to localhost
 #   -mport int
 #     	Master port.  (default 7087)
-#   -name string
-#     	Name of this client. Defaults to closest replica IP + random int
 #   -p int
 #     	GOMAXPROCS.  (default 2)
+#   -psize int
+#     	Payload size for writes. (default 100)
 #   -q int
 #     	Total number of requests.  (default 1000)
 #   -raddr string
 #     	Redis address. Disabled per default.
 #   -rport int
 #     	Redis port. (default 6379)
-#   -s float
-#     	Zipfian s parameter (default 2)
-#   -v float
-#     	Zipfian v parameter (default 1)
+#   -v	verbose mode. 
 #   -w int
 #     	Percentage of updates (writes).  (default 100)
+
 
 if [ "${TYPE}" == "client" ];
 then
