@@ -64,6 +64,7 @@ type Replica struct {
 	rpcCode  uint8
 
 	Ewma []float64
+	Latencies []uint64
 
 	OnClientConnect chan bool
 
@@ -94,6 +95,7 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply b
 		make(map[uint8]*RPCPair),
 		genericsmrproto.GENERIC_SMR_BEACON_REPLY + 1,
 		make([]float64, len(peerAddrList)),
+		make([]uint64, len(peerAddrList)),
 		make(chan bool, 100),
 		sync.Mutex{}}
 
@@ -106,6 +108,7 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply b
 	for i := 0; i < r.N; i++ {
 		r.PreferredPeerOrder[i] = int32((int(r.Id) + 1 + i) % r.N)
 		r.Ewma[i] = 0.0
+		r.Latencies[i] = 0
 	}
 
 	return r
@@ -153,14 +156,14 @@ func (r *Replica) ConnectToPeers() {
 	log.Printf("Replica id: %d. Done connecting to peers\n", r.Id)
 	log.Printf("Node list %v", r.PeerAddrList)
 
-	go r.UpdateClosestQuorum()
-
 	for rid, reader := range r.PeerReaders {
 		if int32(rid) == r.Id {
 			continue
 		}
 		go r.replicaListener(rid, reader)
 	}
+
+	r.UpdateClosestQuorum()
 }
 
 func (r *Replica) ConnectToPeersNoListeners() {
@@ -251,18 +254,21 @@ func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
 			if err = gbeacon.Unmarshal(reader); err != nil {
 				break
 			}
+			log.Println("receive beacon from ",rid)
 			beacon := &Beacon{int32(rid), gbeacon.Timestamp}
-			r.BeaconChan <- beacon
+			r.ReplyBeacon(beacon)
 			break
 
 		case genericsmrproto.GENERIC_SMR_BEACON_REPLY:
 			if err = gbeaconReply.Unmarshal(reader); err != nil {
 				break
 			}
+			log.Println("receive beacon reply from ",rid)
 			//TODO: UPDATE STUFF
 			r.mutex.Lock()
-			r.Ewma[rid] = 0.99*r.Ewma[rid] + 0.01*float64(rdtsc.Cputicks()-gbeaconReply.Timestamp)
+			r.Latencies[rid] = rdtsc.Cputicks()-gbeaconReply.Timestamp
 			r.mutex.Unlock()
+			r.Ewma[rid] = 0.99*r.Ewma[rid] + 0.01*float64(rdtsc.Cputicks()-gbeaconReply.Timestamp)
 			break
 
 		default:
@@ -359,6 +365,7 @@ func (r *Replica) ReplyProposeTS(reply *genericsmrproto.ProposeReplyTS, w *bufio
 }
 
 func (r *Replica) SendBeacon(peerId int32) {
+	log.Println("sending beacon to ",peerId)
 	w := r.PeerWriters[peerId]
 	w.WriteByte(genericsmrproto.GENERIC_SMR_BEACON)
 	beacon := &genericsmrproto.Beacon{rdtsc.Cputicks()}
@@ -414,14 +421,15 @@ func (r *Replica) UpdateClosestQuorum() {
 		}
 	}
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(3 * time.Second)
+
 	quorum := make([]int32, r.N)
 
 	r.mutex.Lock()
 	for i := 0; i < r.N; i++ {
 		pos := 0
 		for j := 0; j < r.N; j++ {
-			if (r.Ewma[j] < r.Ewma[i]) || ((r.Ewma[j] == r.Ewma[i]) && (j < i)) {
+			if (r.Latencies[j] < r.Latencies[i]) || ((r.Latencies[j] == r.Latencies[i]) && (j < i)) {
 				pos++
 			}
 		}
