@@ -28,7 +28,7 @@ var doGpaxos *bool = flag.Bool("g", false, "Use Generalized Paxos as the replica
 var doEpaxos *bool = flag.Bool("e", false, "Use EPaxos as the replication protocol. Defaults to false.")
 var procs *int = flag.Int("p", 2, "GOMAXPROCS. Defaults to 2")
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
- var thrifty = flag.Bool("thrifty",true, "Use only as many messages as strictly required for inter-replica communication.")
+ var thrifty = flag.Bool("thrifty",false, "Use only as many messages as strictly required for inter-replica communication.")
 var exec = flag.Bool("exec", true, "Execute commands.")
 var dreply = flag.Bool("dreply", true, "Reply to client only after command has been executed.")
 var beacon = flag.Bool("beacon", false, "Send beacons to other replicas to compare their relative speeds.")
@@ -38,6 +38,10 @@ func main() {
 	flag.Parse()
 
 	runtime.GOMAXPROCS(*procs)
+
+	if *doMencius && *thrifty{
+		log.Fatal("incompatble options -m -thrifty")
+	}
 
 	if *cpuprofile != "" {
 		f, err := os.Create(*cpuprofile)
