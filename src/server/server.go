@@ -85,6 +85,7 @@ func main() {
 	}
 
 	http.Serve(l, nil)
+
 }
 
 func registerWithMaster(masterAddr string) (int, []string) {

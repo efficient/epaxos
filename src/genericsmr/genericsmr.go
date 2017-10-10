@@ -163,7 +163,6 @@ func (r *Replica) ConnectToPeers() {
 		go r.replicaListener(rid, reader)
 	}
 
-	r.UpdateClosestQuorum()
 }
 
 func (r *Replica) ConnectToPeersNoListeners() {

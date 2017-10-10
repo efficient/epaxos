@@ -272,6 +272,8 @@ var conflicted, weird, slow, happy int
 func (r *Replica) run() {
 	r.ConnectToPeers()
 
+	r.UpdateClosestQuorum()
+
 	dlog.Println("Waiting for client connections")
 
 	go r.WaitForClientConnections()

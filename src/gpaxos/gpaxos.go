@@ -287,6 +287,8 @@ func (r *Replica) run() {
 		go r.handleReplicaConnection(rid, peerReader)
 	}
 
+	r.UpdateClosestQuorum()
+
 	dlog.Println("Waiting for client connections")
 
 	go r.WaitForClientConnections()
