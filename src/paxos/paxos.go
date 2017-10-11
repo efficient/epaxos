@@ -67,7 +67,7 @@ type LeaderBookkeeping struct {
 	nacks           int
 }
 
-func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply bool, durable bool) *Replica {
+func NewReplica(id int, peerAddrList []string, Isleader bool, thrifty bool, exec bool, dreply bool, durable bool) *Replica {
 	r := &Replica{genericsmr.NewReplica(id, peerAddrList, thrifty, exec, dreply),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
@@ -86,6 +86,7 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply b
 		-1}
 
 	r.Durable = durable
+	r.IsLeader = Isleader
 
 	r.prepareRPC = r.RegisterRPC(new(paxosproto.Prepare), r.prepareChan)
 	r.acceptRPC = r.RegisterRPC(new(paxosproto.Accept), r.acceptChan)
@@ -168,16 +169,16 @@ func (r *Replica) run() {
 
 	r.UpdateClosestQuorum()
 
+	if r.IsLeader {
+		log.Println("I am the leader")
+	}
+
 	dlog.Println("Waiting for client connections")
 
 	go r.WaitForClientConnections()
 
 	if r.Exec {
 		go r.executeCommands()
-	}
-
-	if r.Id == 0 {
-		r.IsLeader = true
 	}
 
 	clockChan = make(chan bool, 1)

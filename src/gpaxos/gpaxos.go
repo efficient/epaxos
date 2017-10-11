@@ -74,7 +74,7 @@ type LeaderBookkeeping struct {
 	cstructs      [][]int32
 }
 
-func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply bool) *Replica {
+func NewReplica(id int, peerAddrList []string, IsLeader bool, thrifty bool, exec bool, dreply bool) *Replica {
 	r := &Replica{genericsmr.NewReplica(id, peerAddrList, thrifty, exec, dreply),
 		make(chan *gpaxosproto.Prepare, CHAN_BUFFER_SIZE),
 		make(chan *gpaxosproto.M_1a, CHAN_BUFFER_SIZE),
@@ -100,6 +100,8 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply b
 	if r.fastQSize*4 < 3*r.N {
 		r.fastQSize++
 	}
+
+	r.isLeader = IsLeader
 
 	go r.run()
 
@@ -274,9 +276,6 @@ func (r *Replica) clock() {
 /* Main event processing loop */
 
 func (r *Replica) run() {
-	if r.Id == 0 {
-		r.isLeader = true
-	}
 
 	r.ConnectToPeersNoListeners()
 
@@ -288,6 +287,10 @@ func (r *Replica) run() {
 	}
 
 	r.UpdateClosestQuorum()
+
+	if r.isLeader {
+		log.Println("I am the leader")
+	}
 
 	dlog.Println("Waiting for client connections")
 

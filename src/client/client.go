@@ -47,6 +47,8 @@ var rsp []bool
 var redisServer *redis.Client
 var tarray []int64
 
+const TRUE = uint8(1)
+
 func main() {
 	flag.Parse()
 
@@ -81,7 +83,7 @@ func main() {
 	}
 
 	N = len(rlReply.ReplicaList)
-	minLeader := 0
+	closestLeader := 0
 	minLatency := math.MaxFloat64
 	for i := 0; i < N; i++ {
 		addr := strings.Split(string(rlReply.ReplicaList[i]), ":")[0]
@@ -93,7 +95,7 @@ func main() {
 			latency, _ := strconv.ParseFloat(strings.Split(string(out), "/")[4], 64)
 			log.Printf("%v -> %v", i, latency)
 			if minLatency > latency {
-				minLeader = i
+				closestLeader = i
 				minLatency = latency
 			}
 		}else{
@@ -101,7 +103,7 @@ func main() {
 		}
 	}
 
-	log.Printf("node list %v, closest = (%v,%vms)",rlReply.ReplicaList,minLeader,minLatency)
+	log.Printf("node list %v, closest = (%v,%vms)",rlReply.ReplicaList, closestLeader,minLatency)
 
 	if clientId == "" {
 		clientId = uuid.New().String()
@@ -120,7 +122,7 @@ func main() {
 
 	clientKey := state.Key(uint64(uuid.New().Time())) // a command id unique to this client.
 	for i := 0; i < len(rarray); i++ {
-		rarray[i] = minLeader
+		rarray[i] = closestLeader
 		put[i] = false
 		if *writes > 0 {
 			r := rand.Intn(100)
@@ -157,8 +159,10 @@ func main() {
 			log.Fatalf("Error making the GetLeader RPC\n")
 		}
 		leader = reply.LeaderId
-		log.Printf("The leader is replica %d\n", leader)
+	}else{
+		leader = closestLeader
 	}
+	log.Printf("The leader is replica %d\n", leader)
 
 	var id int32 = 0
 	done := make(chan *state.Value, N)
@@ -175,10 +179,6 @@ func main() {
 			for j := 0; j < j; j++ {
 				rsp[j] = false
 			}
-		}
-
-		if *noLeader {
-			leader = rarray[j]
 		}
 
 		go waitReplies(readers, leader, 1, done)
@@ -306,7 +306,11 @@ func waitReplies(readers []*bufio.Reader, leader int, n int, done chan *state.Va
 			fmt.Println("Error when reading:", err)
 			continue
 		}
-		e = &reply.Value
+		if reply.OK == TRUE {
+			e = &reply.Value
+		}else{
+			log.Fatal("Failed to receive response value")
+		}
 		//fmt.Println(reply.Value)
 		if *check {
 			if rsp[reply.CommandId] {

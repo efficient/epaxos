@@ -12,6 +12,9 @@ import (
 	"sync"
 	"time"
 	"math"
+	"strconv"
+	"strings"
+	"os/exec"
 )
 
 var portnum *int = flag.Int("port", 7087, "Port # to listen on. Defaults to 7087")
@@ -26,6 +29,7 @@ type Master struct {
 	nodes    []*rpc.Client
 	leader   []bool
 	alive    []bool
+	latencies [] float64
 }
 
 func main() {
@@ -41,7 +45,8 @@ func main() {
 		new(sync.Mutex),
 		make([]*rpc.Client, *numNodes),
 		make([]bool, *numNodes),
-		make([]bool, *numNodes)}
+		make([]bool, *numNodes),
+		make([]float64, *numNodes)}
 
 	rpc.Register(master)
 	rpc.HandleHTTP()
@@ -68,27 +73,14 @@ func (master *Master) run() {
 	time.Sleep(2000000000)
 
 	// connect to SMR servers
-	var leader int = 0
-	var minLatency time.Duration = time.Duration(math.MaxInt64)
 	for i := 0; i < master.N; i++ {
-		master.leader[i] = false
 		var err error
 		addr := fmt.Sprintf("%s:%d", master.addrList[i], master.portList[i]+1000)
-		before := time.Now()
 		master.nodes[i], err = rpc.DialHTTP("tcp", addr)
 		if err != nil {
 			log.Fatalf("Error connecting to replica %d (%v)\n", i,addr)
 		}
-		latency := time.Now().Sub(before)
-		if latency < minLatency{
-			minLatency =latency
-			master.leader[leader] = false
-			leader = i
-			master.leader[i] = true
-		}
 	}
-
-	log.Printf("Replica %v is the leader.", master.nodeList[leader])
 
 	for true {
 		time.Sleep(3000 * 1000 * 1000)
@@ -147,13 +139,40 @@ func (master *Master) Register(args *masterproto.RegisterArgs, reply *masterprot
 		master.addrList[nlen] = args.Addr
 		master.portList = master.portList[0 : nlen+1]
 		master.portList[nlen] = args.Port
+		master.leader[index] = false
 		nlen++
+
+		addr := args.Addr
+		if addr == "" {
+			addr = "127.0.0.1"
+		}
+		out, err := exec.Command("ping", addr, "-c 2", "-q").Output()
+		if err == nil {
+			master.latencies[index], _ = strconv.ParseFloat(strings.Split(string(out), "/")[4], 64)
+			log.Printf("%v -> %v", index, master.latencies[index])
+		}else{
+			log.Fatal("cannot connect to "+addr)
+		}
 	}
 
 	if nlen == master.N {
 		reply.Ready = true
 		reply.ReplicaId = index
 		reply.NodeList = master.nodeList
+		reply.IsLeader = false
+
+		minLatency := math.MaxFloat64
+		leader := 0
+		for i := 0; i < len(master.leader); i++ {
+			if master.latencies[i] < minLatency {leader = i}
+		}
+
+		if leader == index {
+			log.Println("The new leader is ", index)
+			master.leader[index] = true
+			reply.IsLeader = true
+		}
+
 	} else {
 		reply.Ready = false
 	}

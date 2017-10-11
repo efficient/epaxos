@@ -57,7 +57,7 @@ func main() {
 
 	log.Printf("Server starting on port %d\n", *portnum)
 
-	replicaId, nodeList := registerWithMaster(fmt.Sprintf("%s:%d", *masterAddr, *masterPort))
+	replicaId, nodeList, isLeader := registerWithMaster(fmt.Sprintf("%s:%d", *masterAddr, *masterPort))
 
 	if *doEpaxos {
 		log.Println("Starting Egalitarian Paxos replica...")
@@ -69,11 +69,11 @@ func main() {
 		rpc.Register(rep)
 	} else if *doGpaxos {
 		log.Println("Starting Generalized Paxos replica...")
-		rep := gpaxos.NewReplica(replicaId, nodeList, *thrifty, *exec, *dreply)
+		rep := gpaxos.NewReplica(replicaId, nodeList, isLeader, *thrifty, *exec, *dreply)
 		rpc.Register(rep)
 	} else {
 		log.Println("Starting classic Paxos replica...")
-		rep := paxos.NewReplica(replicaId, nodeList, *thrifty, *exec, *dreply, *durable)
+		rep := paxos.NewReplica(replicaId, nodeList, isLeader, *thrifty, *exec, *dreply, *durable)
 		rpc.Register(rep)
 	}
 
@@ -88,7 +88,7 @@ func main() {
 
 }
 
-func registerWithMaster(masterAddr string) (int, []string) {
+func registerWithMaster(masterAddr string) (int, []string, bool) {
 	args := &masterproto.RegisterArgs{*myAddr, *portnum}
 	var reply masterproto.RegisterReply
 
@@ -108,7 +108,7 @@ func registerWithMaster(masterAddr string) (int, []string) {
 		time.Sleep(1e9)
 	}
 
-	return reply.ReplicaId, reply.NodeList
+	return reply.ReplicaId, reply.NodeList, reply.IsLeader
 }
 
 func catchKill(interrupt chan os.Signal) {
