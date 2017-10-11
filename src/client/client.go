@@ -76,13 +76,19 @@ func main() {
 		}
 	}
 
-	rlReply := new(masterproto.GetReplicaListReply)
-	err = master.Call("Master.GetReplicaList", new(masterproto.GetReplicaListArgs), rlReply)
-	if err != nil {
-		log.Fatalf("Error making the GetReplicaList RPC")
+	var rlReply *masterproto.GetReplicaListReply
+	for done := false; !done; {
+		rlReply = new(masterproto.GetReplicaListReply)
+		err = master.Call("Master.GetReplicaList", new(masterproto.GetReplicaListArgs), rlReply)
+		if err != nil {
+			log.Fatalf("Error making the GetReplicaList RPC")
+		}
+		if rlReply.Ready {
+			N = len(rlReply.ReplicaList)
+			done = true
+		}
 	}
 
-	N = len(rlReply.ReplicaList)
 	closestLeader := 0
 	minLatency := math.MaxFloat64
 	for i := 0; i < N; i++ {
