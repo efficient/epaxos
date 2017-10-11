@@ -164,7 +164,10 @@ func (master *Master) Register(args *masterproto.RegisterArgs, reply *masterprot
 		minLatency := math.MaxFloat64
 		leader := 0
 		for i := 0; i < len(master.leader); i++ {
-			if master.latencies[i] < minLatency {leader = i}
+			if master.latencies[i] < minLatency {
+				minLatency = master.latencies[i]
+				leader = i
+			}
 		}
 
 		if leader == index {
