@@ -52,6 +52,7 @@ type Replica struct {
 
 	Thrifty bool // send only as many messages as strictly required?
 	Exec    bool // execute commands?
+	LRead   bool // execute local reads?
 	Dreply  bool // reply to client after command has been executed?
 	Beacon  bool // send beacons to detect how fast are the other replicas?
 
@@ -71,7 +72,7 @@ type Replica struct {
 	mutex sync.Mutex
 }
 
-func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply bool) *Replica {
+func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bool, dreply bool) *Replica {
 	r := &Replica{
 		len(peerAddrList),
 		int32(id),
@@ -87,6 +88,7 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply b
 		false,
 		thrifty,
 		exec,
+		lread,
 		dreply,
 		false,
 		false,

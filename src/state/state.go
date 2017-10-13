@@ -15,6 +15,7 @@ const (
 	NONE Operation = iota
 	PUT
 	GET
+	SCAN
 	DELETE
 	RLOCK
 	WLOCK
@@ -81,8 +82,8 @@ func (c *Command) Execute(st *State) Value {
 
 	//var key, value [8]byte
 
-	//    st.mutex.Lock()
-	//    defer st.mutex.Unlock()
+	st.mutex.Lock()
+	defer st.mutex.Unlock()
 
 	switch c.Op {
 	case PUT:
@@ -99,6 +100,15 @@ func (c *Command) Execute(st *State) Value {
 		if val, present := st.Store[c.K]; present {
 			return val
 		}
+
+	case SCAN:
+		val := NIL()
+		for i:=c.K; i<(c.K+100); i++{
+			if tmp, present := st.Store[c.K]; present {
+				val = tmp
+			}
+		}
+		return val
 	}
 
 	return NIL()

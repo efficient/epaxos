@@ -67,8 +67,8 @@ type LeaderBookkeeping struct {
 	nacks           int
 }
 
-func NewReplica(id int, peerAddrList []string, Isleader bool, thrifty bool, exec bool, dreply bool, durable bool) *Replica {
-	r := &Replica{genericsmr.NewReplica(id, peerAddrList, thrifty, exec, dreply),
+func NewReplica(id int, peerAddrList []string, Isleader bool, thrifty bool, exec bool, lread bool, dreply bool, durable bool) *Replica {
+	r := &Replica{genericsmr.NewReplica(id, peerAddrList, thrifty, exec, lread, dreply),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
@@ -192,7 +192,7 @@ func (r *Replica) run() {
 
 		case <-clockChan:
 			//activate the new proposals channel
-			onOffProposeChan = r.ProposeChan
+			// onOffProposeChan = r.ProposeChan
 			break
 
 		case propose := <-onOffProposeChan:
@@ -200,7 +200,7 @@ func (r *Replica) run() {
 			dlog.Printf("Proposal with op %d\n", propose.Command.Op)
 			r.handlePropose(propose)
 			//deactivate the new proposals channel to prioritize the handling of protocol messages
-			onOffProposeChan = nil
+			// onOffProposeChan = nil
 			break
 
 		case prepareS := <-r.prepareChan:
@@ -383,6 +383,18 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	if !r.IsLeader {
 		preply := &genericsmrproto.ProposeReplyTS{FALSE, -1, state.NIL(), 0}
 		r.ReplyProposeTS(preply, propose.Reply)
+		return
+	}
+
+	if r.LRead && (propose.Command.Op == state.GET || propose.Command.Op == state.SCAN) {
+		dlog.Println("Executing read locally")
+		val := propose.Command.Execute(r.State)
+			propreply := &genericsmrproto.ProposeReplyTS{
+				TRUE,
+				propose.CommandId,
+				val,
+				propose.Timestamp}
+			r.ReplyProposeTS(propreply, propose.Reply)
 		return
 	}
 
