@@ -230,7 +230,7 @@ var slowClockChan chan bool
 
 func (r *Replica) fastClock() {
 	for !r.Shutdown {
-		time.Sleep(5 * 1e6) // 5 ms
+		time.Sleep(1 * 1e6) // 5 ms
 		fastClockChan <- true
 	}
 }
@@ -793,6 +793,18 @@ func bfFromCommands(cmds []state.Command) *bloomfilter.Bloomfilter {
 
 func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	//TODO!! Handle client retries
+
+	if r.LRead && (propose.Command.Op == state.GET || propose.Command.Op == state.SCAN) {
+		dlog.Println("Executing read locally")
+		val := propose.Command.Execute(r.State)
+		propreply := &genericsmrproto.ProposeReplyTS{
+			TRUE,
+			propose.CommandId,
+			val,
+			propose.Timestamp}
+		r.ReplyProposeTS(propreply, propose.Reply)
+		return
+	}
 
 	batchSize := len(r.ProposeChan) + 1
 	if batchSize > MAX_BATCH {
@@ -1636,7 +1648,7 @@ func (r *Replica) findPreAcceptConflicts(cmds []state.Command, replica int32, in
 				// instance q.i depends on instance replica.instance, it is not a conflict
 				continue
 			}
-			if state.ConflictBatch(inst.Cmds, cmds) {
+			if r.LRead || state.ConflictBatch(inst.Cmds, cmds) {
 				if i > deps[q] ||
 					(i < deps[q] && inst.Seq >= seq && (q != replica || inst.Status > epaxosproto.PREACCEPTED_EQ)) {
 					// this is a conflict
