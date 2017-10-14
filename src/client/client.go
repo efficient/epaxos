@@ -89,7 +89,7 @@ func main() {
 		}
 	}
 
-	closestLeader := 0
+	closestReplica := 0
 	minLatency := math.MaxFloat64
 	for i := 0; i < N; i++ {
 		addr := strings.Split(string(rlReply.ReplicaList[i]), ":")[0]
@@ -101,7 +101,7 @@ func main() {
 			latency, _ := strconv.ParseFloat(strings.Split(string(out), "/")[4], 64)
 			log.Printf("%v -> %v", i, latency)
 			if minLatency > latency {
-				closestLeader = i
+				closestReplica = i
 				minLatency = latency
 			}
 		}else{
@@ -109,7 +109,7 @@ func main() {
 		}
 	}
 
-	log.Printf("node list %v, closest = (%v,%vms)",rlReply.ReplicaList, closestLeader,minLatency)
+	log.Printf("node list %v, closest = (%v,%vms)",rlReply.ReplicaList, closestReplica,minLatency)
 
 	if clientId == "" {
 		clientId = uuid.New().String()
@@ -128,7 +128,7 @@ func main() {
 
 	clientKey := state.Key(uint64(uuid.New().Time())) // a command id unique to this client.
 	for i := 0; i < len(rarray); i++ {
-		rarray[i] = closestLeader
+		rarray[i] = closestReplica
 		put[i] = false
 		if *writes > 0 {
 			r := rand.Intn(100)
@@ -166,7 +166,7 @@ func main() {
 		}
 		leader = reply.LeaderId
 	}else{
-		leader = closestLeader
+		leader = closestReplica
 	}
 	log.Printf("The leader is replica %d\n", leader)
 
