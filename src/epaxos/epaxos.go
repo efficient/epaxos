@@ -307,7 +307,7 @@ func (r *Replica) run() {
 			r.handlePropose(propose)
 			//deactivate new proposals channel to prioritize the handling of other protocol messages,
 			//and to allow commands to accumulate for batching
-			// onOffProposeChan = nil
+			onOffProposeChan = nil
 			break
 
 		case <-fastClockChan:
