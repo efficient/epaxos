@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"dlog"
 	"flag"
 	"fmt"
 	"genericsmrproto"
@@ -39,13 +38,15 @@ var verbose *bool = flag.Bool("v", false, "verbose mode. ")
 
 var N int
 
-var successful []int
-
-var rarray []int
 var rsp []bool
 
 var redisServer *redis.Client
 var tarray []int64
+
+var master *rpc.Client
+var leader int
+var closestReplica int
+var hasFailed bool // if true then go to leader
 
 const TRUE = uint8(1)
 
@@ -58,7 +59,8 @@ func main() {
 		log.Fatalf("Conflicts percentage must be between 0 and 100.\n")
 	}
 
-	master, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", *masterAddr, *masterPort))
+	var err error
+	master, err = rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", *masterAddr, *masterPort))
 	if err != nil {
 		log.Fatalf("Error connecting to master\n")
 	}
@@ -89,7 +91,7 @@ func main() {
 		}
 	}
 
-	closestReplica := 0
+	closestReplica = 0
 	minLatency := math.MaxFloat64
 	for i := 0; i < N; i++ {
 		addr := strings.Split(string(rlReply.ReplicaList[i]), ":")[0]
@@ -121,14 +123,12 @@ func main() {
 	readers := make([]*bufio.Reader, N)
 	writers := make([]*bufio.Writer, N)
 
-	rarray = make([]int, *reqsNb)
 	tarray = make([]int64, *reqsNb)
 	karray := make([]state.Key, *reqsNb)
 	put := make([]bool, *reqsNb)
 
 	clientKey := state.Key(uint64(uuid.New().Time())) // a command id unique to this client.
-	for i := 0; i < len(rarray); i++ {
-		rarray[i] = closestReplica
+	for i := 0; i < *reqsNb; i++ {
 		put[i] = false
 		if *writes > 0 {
 			r := rand.Intn(100)
@@ -156,18 +156,14 @@ func main() {
 	}
 	log.Println("Connected")
 
-	successful = make([]int, N)
-	leader := 0
+	leader = 0
+	hasFailed = false
 
-	if *noLeader == false {
-		reply := new(masterproto.GetLeaderReply)
-		if err = master.Call("Master.GetLeader", new(masterproto.GetLeaderArgs), reply); err != nil {
-			log.Fatalf("Error making the GetLeader RPC\n")
-		}
-		leader = reply.LeaderId
-	}else{
-		leader = closestReplica
+	reply := new(masterproto.GetLeaderReply)
+	if err = master.Call("Master.GetLeader", new(masterproto.GetLeaderArgs), reply); err != nil {
+		log.Fatalf("Error making the GetLeader RPC\n")
 	}
+	leader = reply.LeaderId
 	log.Printf("The leader is replica %d\n", leader)
 
 	var id int32 = 0
@@ -178,6 +174,7 @@ func main() {
 
 	for j := 0; j < *reqsNb; j++ {
 
+		id++
 		cmdString := ""
 
 		if *check {
@@ -187,11 +184,8 @@ func main() {
 			}
 		}
 
-		go waitReplies(readers, leader, 1, done)
-
 		before := time.Now()
 
-		dlog.Printf("Sending proposal %d\n", id)
 		args.CommandId = id
 		args.Command.K = state.Key(karray[j])
 		if put[j] {
@@ -215,9 +209,14 @@ func main() {
 			cmdString+=")"
 		}
 
+		submitter := closestReplica
 		if !*fast {
-			writers[leader].WriteByte(genericsmrproto.PROPOSE)
-			args.Marshal(writers[leader])
+			if (*noLeader == false && args.Command.Op == state.PUT )|| hasFailed {
+				submitter = leader
+			}
+			writers[submitter].WriteByte(genericsmrproto.PROPOSE)
+			args.Marshal(writers[submitter])
+			writers[submitter].Flush()
 		} else {
 			//send to everyone
 			for rep := 0; rep < N; rep++ {
@@ -226,16 +225,15 @@ func main() {
 				writers[rep].Flush()
 			}
 		}
-
-		id++
-		for i := 0; i < N; i++ {
-			writers[i].Flush()
+		if *verbose{
+			log.Printf("Sending proposal %d to %d\n", id, submitter)
 		}
 
-		err := false
+		go waitReplies(readers, submitter, 1, done)
+
 		value := <-done
-		err = value ==nil || err
-		if !err && *verbose{
+
+		if value!=nil && *verbose{
 			cmdString+= value.String()
 		}
 
@@ -253,28 +251,10 @@ func main() {
 			}
 		}
 
-		if err {
-			if *noLeader {
-				N = N - 1
-			} else {
-				reply := new(masterproto.GetLeaderReply)
-				master.Call("Master.GetLeader", new(masterproto.GetLeaderArgs), reply)
-				leader = reply.LeaderId
-				log.Printf("New leader is replica %d\n", leader)
-			}
-		}
-
 	}
 
 	after_total := time.Now()
 	fmt.Printf("Test took %v\n", after_total.Sub(before_total))
-
-	s := 0
-	for _, succ := range successful {
-		s += succ
-	}
-
-	fmt.Printf("Successful: %d\n", s)
 
 	if redisServer!=nil{
 		for j := 0; j < *reqsNb; j++ {
@@ -305,28 +285,53 @@ func main() {
 
 func waitReplies(readers []*bufio.Reader, leader int, n int, done chan *state.Value) {
 	var e *state.Value
+	var err error
 	e = nil
 	reply := new(genericsmrproto.ProposeReplyTS)
+
 	for i := 0; i < n; i++ {
-		if err := reply.Unmarshal(readers[leader]); err != nil {
-			fmt.Println("Error when reading:", err)
+
+		tmp := new(genericsmrproto.ProposeReplyTS)
+		if err = tmp.Unmarshal(readers[leader]); err != nil {
+			log.Println("Error when reading:", err)
 			continue
 		}
-		if reply.OK == TRUE {
-			e = &reply.Value
-		}else{
-			log.Fatal("Failed to receive response value")
-		}
-		//fmt.Println(reply.Value)
-		if *check {
-			if rsp[reply.CommandId] {
-				fmt.Println("Duplicate reply", reply.CommandId)
-			}
-			rsp[reply.CommandId] = true
-		}
-		if reply.OK != 0 {
-			successful[leader]++
-		}
+
+		reply = tmp
+
 	}
+
+	if *check {
+		if rsp[reply.CommandId] {
+			fmt.Println("Duplicate reply", reply.CommandId)
+		}
+		rsp[reply.CommandId] = true
+	}
+
+	if reply.OK == TRUE {
+
+		e = &reply.Value
+
+	}else{
+
+		if *verbose{
+			log.Println("Failed to receive a response")
+		}
+
+		if err != nil {
+			reply := new(masterproto.GetLeaderReply)
+			master.Call("Master.GetLeader", new(masterproto.GetLeaderArgs), reply)
+			leader = reply.LeaderId
+			log.Printf("New leader is replica %d\n", leader)
+		}
+
+		if !hasFailed {
+			hasFailed = true
+		} else {
+			log.Fatal("cannot recover")
+		}
+
+	}
+
 	done <- e
 }
