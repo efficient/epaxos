@@ -643,6 +643,9 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 		if inst.lb.acceptOKs+1 > r.N>>1 {
 			inst = r.instanceSpace[areply.Instance]
 			inst.status = COMMITTED
+			if r.LRead{
+				r.bcastCommit(areply.Instance, inst.ballot, inst.cmds)
+			}
 			if inst.lb.clientProposals != nil && !r.Dreply {
 				// give client the all clear
 				for i := 0; i < len(inst.cmds); i++ {
@@ -660,7 +663,9 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 
 			r.updateCommittedUpTo()
 
-			r.bcastCommit(areply.Instance, inst.ballot, inst.cmds)
+			if !r.LRead {
+				r.bcastCommit(areply.Instance, inst.ballot, inst.cmds)
+			}
 		}
 	} else {
 		// TODO: there is probably another active leader
