@@ -18,17 +18,20 @@ import (
 const TRUE = uint8(1)
 
 type Parameters struct {
-	Leader       int
-	IsLeaderless bool
-	IsFast       bool
-	N            int
-	servers      []net.Conn
-	readers      []*bufio.Reader
-	writers      []*bufio.Writer
-	id           int32
+	HasFailed bool
+	ClosestReplica int
+	Leader         int
+	IsLeaderless   bool
+	IsFast         bool
+	N              int
+	servers        []net.Conn
+	readers        []*bufio.Reader
+	writers        []*bufio.Writer
+	id             int32
+	done           chan state.Value
 }
 
-func NewParameters() *Parameters{ return &Parameters{ 0,false,false,0,nil,nil,nil,0 } }
+func NewParameters() *Parameters{ return &Parameters{ false,0,0, false,false,0,nil,nil,nil,0, make(chan state.Value, 1)} }
 
 func (b *Parameters) Connect(masterAddr string, masterPort int, leaderless bool, fast bool) {
 
@@ -53,7 +56,6 @@ func (b *Parameters) Connect(masterAddr string, masterPort int, leaderless bool,
 		}
 	}
 
-	closest := 0
 	minLatency := math.MaxFloat64
 	for i := 0; i < len(rlReply.ReplicaList); i++ {
 		addr := strings.Split(string(rlReply.ReplicaList[i]), ":")[0]
@@ -65,13 +67,15 @@ func (b *Parameters) Connect(masterAddr string, masterPort int, leaderless bool,
 			latency, _ := strconv.ParseFloat(strings.Split(string(out), "/")[4], 64)
 			log.Printf("%v -> %v", i, latency)
 			if minLatency > latency {
-				closest = i
+				b.ClosestReplica = i
 				minLatency = latency
 			}
 		} else {
 			log.Fatal("cannot connect to " + rlReply.ReplicaList[i])
 		}
 	}
+
+	log.Printf("node list %v, closest = (%v,%vms)",rlReply.ReplicaList, b.ClosestReplica, minLatency)
 
 	b.N = len(rlReply.ReplicaList)
 
@@ -88,7 +92,6 @@ func (b *Parameters) Connect(masterAddr string, masterPort int, leaderless bool,
 		b.readers[i] = bufio.NewReader(b.servers[i])
 		b.writers[i] = bufio.NewWriter(b.servers[i])
 	}
-	log.Println("Connected")
 
 	if leaderless == false {
 		reply := new(masterproto.GetLeaderReply)
@@ -96,24 +99,23 @@ func (b *Parameters) Connect(masterAddr string, masterPort int, leaderless bool,
 			log.Fatalf("Error making the GetLeader RPC\n")
 		}
 		b.Leader = reply.LeaderId
-	} else {
-		b.Leader = closest
+		log.Printf("The Leader is replica %d\n", b.Leader)
 	}
-	log.Printf("The Leader is replica %d\n", b.Leader)
+
 }
 
-func (b *Parameters) Write(key int64, value string) {
-	b.id++;
+func (b *Parameters) Write(key int64, value []byte) {
+	b.id++
 	args := genericsmrproto.Propose{b.id, state.Command{state.PUT, 0, state.NIL()}, 0}
 	args.CommandId = b.id
 	args.Command.K = state.Key(key)
-	args.Command.V = []byte(value)
+	args.Command.V = value
 	args.Command.Op = state.PUT
 	b.execute(args)
 }
 
-func (b *Parameters) Read(key int64) string {
-	b.id++;
+func (b *Parameters) Read(key int64) []byte{
+	b.id++
 	args := genericsmrproto.Propose{b.id, state.Command{state.PUT, 0, state.NIL()}, 0}
 	args.CommandId = b.id
 	args.Command.K = state.Key(key)
@@ -121,43 +123,71 @@ func (b *Parameters) Read(key int64) string {
 	return b.execute(args)
 }
 
+func (b *Parameters) Scan(key int64) []byte{
+	b.id++
+	args := genericsmrproto.Propose{b.id, state.Command{state.PUT, 0, state.NIL()}, 0}
+	args.CommandId = b.id
+	args.Command.K = state.Key(key)
+	args.Command.Op = state.SCAN
+	return b.execute(args)
+}
 
-// Helpers
-
-func (b *Parameters) execute(args genericsmrproto.Propose) string {
-
-	done := make(chan *state.Value, b.N)
+func (b *Parameters) execute(args genericsmrproto.Propose) []byte{
 
 	if b.IsFast {
 		log.Fatal("NYIT")
 	}
 
-	go waitReplies(b.readers, b.Leader, 1, done)
+	submitter := b.ClosestReplica
+	if (!b.IsLeaderless && args.Command.Op == state.PUT )|| b.HasFailed {
+		submitter = b.Leader
+	}
+	go b.waitReplies(submitter)
 
-	b.writers[b.Leader].WriteByte(genericsmrproto.PROPOSE)
-	args.Marshal(b.writers[b.Leader])
-	b.writers[b.Leader].Flush()
-	err := false
-	value := <-done
-	err = value == nil || err
-
-	return value.String()
-}
-
-func waitReplies(readers []*bufio.Reader, nnode int, n int, done chan *state.Value) {
-	var e *state.Value
-	e = nil
-	reply := new(genericsmrproto.ProposeReplyTS)
-	for i := 0; i < n; i++ {
-		if err := reply.Unmarshal(readers[nnode]); err != nil {
-			fmt.Println("Error when reading:", err)
-			continue
-		}
-		if reply.OK == TRUE {
-			e = &reply.Value
-		} else {
-			log.Fatal("Failed to receive response value")
+	if !b.IsFast {
+		b.writers[submitter].WriteByte(genericsmrproto.PROPOSE)
+		args.Marshal(b.writers[submitter])
+		b.writers[submitter].Flush()
+	} else {
+		//send to everyone
+		for rep := 0; rep < b.N; rep++ {
+			b.writers[rep].WriteByte(genericsmrproto.PROPOSE)
+			args.Marshal(b.writers[rep])
+			b.writers[rep].Flush()
 		}
 	}
-	done <- e
+
+	value := <- b.done
+	return value
+}
+
+func (b *Parameters) waitReplies(submitter int) {
+	var e state.Value
+	var err error
+
+	// FIXME handle b.Fast properly
+	reply := new(genericsmrproto.ProposeReplyTS)
+	if err = reply.Unmarshal(b.readers[submitter]); err != nil {
+		log.Println("Error when reading:", err)
+	}
+
+	if reply.OK == TRUE {
+
+		e = reply.Value
+
+	}else{
+
+		e = state.NIL()
+
+		log.Println("Failed to receive a response")
+
+		if !b.HasFailed {
+			b.HasFailed = true
+		} else {
+			log.Fatal("cannot recover")
+		}
+
+	}
+
+	b.done <- e
 }
