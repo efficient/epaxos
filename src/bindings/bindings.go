@@ -135,7 +135,7 @@ func (b *Parameters) Scan(key int64) []byte{
 func (b *Parameters) execute(args genericsmrproto.Propose) []byte{
 
 	if b.IsFast {
-		log.Fatal("NYIT")
+		log.Fatal("NYI")
 	}
 
 	submitter := b.ClosestReplica
