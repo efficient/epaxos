@@ -688,14 +688,16 @@ func (r *Replica) executeCommands() {
 			if r.instanceSpace[i].cmds != nil {
 				inst := r.instanceSpace[i]
 				for j := 0; j < len(inst.cmds); j++ {
-					val := inst.cmds[j].Execute(r.State)
 					if r.Dreply && inst.lb != nil && inst.lb.clientProposals != nil {
+						val := inst.cmds[j].Execute(r.State)
 						propreply := &genericsmrproto.ProposeReplyTS{
 							TRUE,
 							inst.lb.clientProposals[j].CommandId,
 							val,
 							inst.lb.clientProposals[j].Timestamp}
 						r.ReplyProposeTS(propreply, inst.lb.clientProposals[j].Reply)
+					} else if inst.cmds[j].Op == state.PUT {
+						inst.cmds[j].Execute(r.State)
 					}
 				}
 				i++

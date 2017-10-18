@@ -866,12 +866,13 @@ func (r *Replica) executeCommands() {
 				break
 			}
 
-			inst.command.Execute(r.State)
-
 			if r.Dreply && inst.lb != nil && inst.lb.clientProposal != nil {
+				val := inst.command.Execute(r.State)
 				dlog.Printf("Sending ACK for req. %d\n", inst.lb.clientProposal.CommandId)
-				r.ReplyProposeTS(&genericsmrproto.ProposeReplyTS{TRUE, inst.lb.clientProposal.CommandId, state.NIL(), inst.lb.clientProposal.Timestamp},
+				r.ReplyProposeTS(&genericsmrproto.ProposeReplyTS{TRUE, inst.lb.clientProposal.CommandId, val, inst.lb.clientProposal.Timestamp},
 					inst.lb.clientProposal.Reply)
+			} else if inst.command.Op == state.PUT{
+				inst.command.Execute(r.State)
 			}
 			inst.status = EXECUTED
 

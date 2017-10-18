@@ -6,6 +6,7 @@ import (
 	"genericsmrproto"
 	"sort"
 	"time"
+	"state"
 )
 
 const (
@@ -114,8 +115,8 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 				time.Sleep(1000 * 1000)
 			}
 			for idx := 0; idx < len(w.Cmds); idx++ {
-				val := w.Cmds[idx].Execute(e.r.State)
 				if e.r.Dreply && w.lb != nil && w.lb.clientProposals != nil {
+					val := w.Cmds[idx].Execute(e.r.State)
 					e.r.ReplyProposeTS(
 						&genericsmrproto.ProposeReplyTS{
 							TRUE,
@@ -123,6 +124,8 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 							val,
 							w.lb.clientProposals[idx].Timestamp},
 						w.lb.clientProposals[idx].Reply)
+				} else if w.Cmds[idx].Op == state.PUT{
+					w.Cmds[idx].Execute(e.r.State)
 				}
 			}
 			w.Status = epaxosproto.EXECUTED
