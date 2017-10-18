@@ -291,6 +291,9 @@ func (r *Replica) clientListener(conn net.Conn) {
 	writer := bufio.NewWriter(conn)
 	var msgType byte //:= make([]byte, 1)
 	var err error
+
+	log.Println("Client connection up : ", conn.RemoteAddr())
+
 	for !r.Shutdown && err == nil {
 
 		if msgType, err = reader.ReadByte(); err != nil {
@@ -324,9 +327,11 @@ func (r *Replica) clientListener(conn net.Conn) {
 			break
 		}
 	}
-	if err != nil && err != io.EOF {
-		log.Println("Error when reading from client connection:", err)
-	}
+
+	log.Println("Closing client connection: ", conn.RemoteAddr())
+
+	conn.Close()
+
 }
 
 func (r *Replica) RegisterRPC(msgObj fastrpc.Serializable, notify chan fastrpc.Serializable) uint8 {

@@ -13,6 +13,8 @@ import (
 	"strings"
 	"os/exec"
 	"strconv"
+	"dlog"
+	"time"
 )
 
 const TRUE = uint8(1)
@@ -84,13 +86,15 @@ func (b *Parameters) Connect(masterAddr string, masterPort int, leaderless bool,
 	b.writers = make([]*bufio.Writer, b.N)
 
 	for i := 0; i < b.N; i++ {
+		dlog.Println("Connecting to ",rlReply.ReplicaList[i])
 		var err error
-		b.servers[i], err = net.Dial("tcp", rlReply.ReplicaList[i])
+		b.servers[i], err = net.DialTimeout("tcp", rlReply.ReplicaList[i], 10*time.Second)
 		if err != nil {
-			log.Printf("Error connecting to replica %d\n", i)
+			log.Fatal("Connection error ")
+		}else {
+			b.readers[i] = bufio.NewReader(b.servers[i])
+			b.writers[i] = bufio.NewWriter(b.servers[i])
 		}
-		b.readers[i] = bufio.NewReader(b.servers[i])
-		b.writers[i] = bufio.NewWriter(b.servers[i])
 	}
 
 	if leaderless == false {
@@ -144,6 +148,8 @@ func (b *Parameters) execute(args genericsmrproto.Propose) []byte{
 	}
 	go b.waitReplies(submitter)
 
+	dlog.Println("Proposal ", args.CommandId)
+
 	if !b.IsFast {
 		b.writers[submitter].WriteByte(genericsmrproto.PROPOSE)
 		args.Marshal(b.writers[submitter])
@@ -156,6 +162,8 @@ func (b *Parameters) execute(args genericsmrproto.Propose) []byte{
 			b.writers[rep].Flush()
 		}
 	}
+
+	dlog.Println("Sent to ",submitter)
 
 	value := <- b.done
 	return value
