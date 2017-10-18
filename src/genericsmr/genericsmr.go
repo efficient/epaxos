@@ -67,8 +67,6 @@ type Replica struct {
 	Ewma []float64
 	Latencies []uint64
 
-	OnClientConnect chan bool
-
 	mutex sync.Mutex
 }
 
@@ -98,7 +96,6 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bo
 		genericsmrproto.GENERIC_SMR_BEACON_REPLY + 1,
 		make([]float64, len(peerAddrList)),
 		make([]uint64, len(peerAddrList)),
-		make(chan bool, 100),
 		sync.Mutex{}}
 
 	var err error
@@ -233,7 +230,6 @@ func (r *Replica) WaitForClientConnections() {
 		}
 		go r.clientListener(conn)
 
-		r.OnClientConnect <- true
 	}
 }
 

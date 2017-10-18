@@ -397,6 +397,8 @@ func (r *Replica) run() {
 
 		case <-slowClockChan:
 			if r.Beacon {
+				log.Printf("weird %d; conflicted %d; slow %d; happy %d\n", weird, conflicted, slow, happy)
+				weird, conflicted, slow, happy = 0, 0, 0, 0
 				for q := int32(0); q < int32(r.N); q++ {
 					if q == r.Id {
 						continue
@@ -405,9 +407,6 @@ func (r *Replica) run() {
 				}
 			}
 			break
-		case <-r.OnClientConnect:
-			log.Printf("weird %d; conflicted %d; slow %d; happy %d\n", weird, conflicted, slow, happy)
-			weird, conflicted, slow, happy = 0, 0, 0, 0
 
 		case iid := <-r.instancesToRecover:
 			r.startRecoveryForInstance(iid.replica, iid.instance)
