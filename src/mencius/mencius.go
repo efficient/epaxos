@@ -428,18 +428,6 @@ func (r *Replica) bcastCommit(instance int32, skip uint8, nbInstToSkip int32, co
 
 func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 
-	if r.LRead && (propose.Command.Op == state.GET || propose.Command.Op == state.SCAN) {
-		dlog.Println("Executing read locally")
-		val := propose.Command.Execute(r.State)
-		propreply := &genericsmrproto.ProposeReplyTS{
-			TRUE,
-			propose.CommandId,
-			val,
-			propose.Timestamp}
-		r.ReplyProposeTS(propreply, propose.Reply)
-		return
-	}
-
 	instNo := r.crtInstance
 	r.crtInstance += int32(r.N)
 

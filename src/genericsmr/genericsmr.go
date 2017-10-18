@@ -14,9 +14,12 @@ import (
 	"state"
 	"time"
 	"sync"
+	"dlog"
 )
 
 const CHAN_BUFFER_SIZE = 200000
+const TRUE = uint8(1)
+const FALSE = uint8(0)
 
 type RPCPair struct {
 	Obj  fastrpc.Serializable
@@ -299,11 +302,22 @@ func (r *Replica) clientListener(conn net.Conn) {
 		switch uint8(msgType) {
 
 		case genericsmrproto.PROPOSE:
-			prop := new(genericsmrproto.Propose)
-			if err = prop.Unmarshal(reader); err != nil {
-				break
+			propose := new(genericsmrproto.Propose)
+			if r.LRead && (propose.Command.Op == state.GET || propose.Command.Op == state.SCAN) {
+				dlog.Println("Executing read locally")
+				val := propose.Command.Execute(r.State)
+				propreply := &genericsmrproto.ProposeReplyTS{
+					TRUE,
+					propose.CommandId,
+					val,
+					propose.Timestamp}
+				r.ReplyProposeTS(propreply, writer)
+			}else {
+				if err = propose.Unmarshal(reader); err != nil {
+					break
+				}
+				r.ProposeChan <- &Propose{propose, writer}
 			}
-			r.ProposeChan <- &Propose{prop, writer}
 			break
 
 		case genericsmrproto.READ:
