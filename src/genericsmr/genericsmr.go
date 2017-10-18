@@ -292,7 +292,7 @@ func (r *Replica) clientListener(conn net.Conn) {
 	var msgType byte //:= make([]byte, 1)
 	var err error
 
-	log.Println("Client connection up : ", conn.RemoteAddr())
+	log.Println("Client connection up ", conn.RemoteAddr())
 
 	for !r.Shutdown && err == nil {
 
@@ -328,9 +328,9 @@ func (r *Replica) clientListener(conn net.Conn) {
 		}
 	}
 
-	log.Println("Closing client connection: ", conn.RemoteAddr())
-
 	conn.Close()
+
+	log.Println("Client connection down ", conn.RemoteAddr())
 
 }
 

@@ -13,8 +13,8 @@ import (
 	"strings"
 	"os/exec"
 	"strconv"
-	"dlog"
 	"time"
+	"dlog"
 )
 
 const TRUE = uint8(1)
@@ -86,11 +86,10 @@ func (b *Parameters) Connect(masterAddr string, masterPort int, leaderless bool,
 	b.writers = make([]*bufio.Writer, b.N)
 
 	for i := 0; i < b.N; i++ {
-		dlog.Println("Connecting to ",rlReply.ReplicaList[i])
 		var err error
 		b.servers[i], err = net.DialTimeout("tcp", rlReply.ReplicaList[i], 10*time.Second)
 		if err != nil {
-			log.Fatal("Connection error ")
+			log.Fatal("Connection error with ",rlReply.ReplicaList[i])
 		}else {
 			b.readers[i] = bufio.NewReader(b.servers[i])
 			b.writers[i] = bufio.NewWriter(b.servers[i])
@@ -105,7 +104,15 @@ func (b *Parameters) Connect(masterAddr string, masterPort int, leaderless bool,
 		b.Leader = reply.LeaderId
 		log.Printf("The Leader is replica %d\n", b.Leader)
 	}
+	log.Printf("Connected")
 
+}
+
+func (b *Parameters) Disconnect(){
+	for _,server := range b.servers{
+		server.Close()
+	}
+	log.Printf("Disconnected")
 }
 
 func (b *Parameters) Write(key int64, value []byte) {
@@ -147,8 +154,6 @@ func (b *Parameters) execute(args genericsmrproto.Propose) []byte{
 		submitter = b.Leader
 	}
 	go b.waitReplies(submitter)
-
-	dlog.Println("Proposal ", args.CommandId)
 
 	if !b.IsFast {
 		b.writers[submitter].WriteByte(genericsmrproto.PROPOSE)
