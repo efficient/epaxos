@@ -173,9 +173,9 @@ func (r *Replica) run() {
 		log.Println("I am the leader")
 	}
 
-	dlog.Println("Waiting for client connections")
-
 	go r.WaitForClientConnections()
+
+	log.Println("Waiting for client connections")
 
 	if r.Exec {
 		go r.executeCommands()

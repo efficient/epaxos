@@ -176,9 +176,9 @@ var lastSeenInstance int32
 func (r *Replica) run() {
 	r.ConnectToPeers()
 
-	dlog.Println("Waiting for client connections")
-
 	go r.WaitForClientConnections()
+
+	log.Println("Waiting for client connections")
 
 	if r.Exec {
 		go r.executeCommands()

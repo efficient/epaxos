@@ -274,9 +274,9 @@ func (r *Replica) run() {
 
 	r.UpdateClosestQuorum()
 
-	dlog.Println("Waiting for client connections")
-
 	go r.WaitForClientConnections()
+
+	log.Println("Waiting for client connections")
 
 	if r.Exec {
 		go r.executeCommands()
