@@ -291,7 +291,7 @@ func (r *Replica) clientListener(conn net.Conn) {
 	var err error
 
 	r.mutex.Lock()
-	log.Println("Client connection up ", conn.RemoteAddr(),"(",r.LRead,")")
+	log.Println("Client up ", conn.RemoteAddr(),"(",r.LRead,")")
 	r.mutex.Unlock()
 
 	for !r.Shutdown && err == nil {
@@ -340,7 +340,7 @@ func (r *Replica) clientListener(conn net.Conn) {
 
 	conn.Close()
 
-	log.Println("Client connection down ", conn.RemoteAddr())
+	log.Println("Client down ", conn.RemoteAddr())
 
 }
 
