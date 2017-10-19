@@ -2,6 +2,7 @@ FROM golang
 
 WORKDIR /app
 
+ADD https://api.github.com/repos/otrack/epaxos/git/refs/heads/master epaxos-version.json
 RUN git clone https://github.com/otrack/epaxos
 RUN GOPATH=/app/epaxos go get -u github.com/go-redis/redis
 RUN GOPATH=/app/epaxos go get -u github.com/google/uuid
