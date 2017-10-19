@@ -14,7 +14,6 @@ import (
 	"state"
 	"time"
 	"sync"
-	"dlog"
 )
 
 const CHAN_BUFFER_SIZE = 200000
@@ -291,7 +290,9 @@ func (r *Replica) clientListener(conn net.Conn) {
 	var msgType byte //:= make([]byte, 1)
 	var err error
 
-	log.Println("Client connection up ", conn.RemoteAddr())
+	r.mutex.Lock()
+	log.Println("Client connection up ", conn.RemoteAddr(),"(",r.LRead,")")
+	r.mutex.Unlock()
 
 	for !r.Shutdown && err == nil {
 
@@ -303,8 +304,10 @@ func (r *Replica) clientListener(conn net.Conn) {
 
 		case genericsmrproto.PROPOSE:
 			propose := new(genericsmrproto.Propose)
+			if err = propose.Unmarshal(reader); err != nil {
+				break
+			}
 			if r.LRead && (propose.Command.Op == state.GET || propose.Command.Op == state.SCAN) {
-				dlog.Println("Executing read locally")
 				val := propose.Command.Execute(r.State)
 				propreply := &genericsmrproto.ProposeReplyTS{
 					TRUE,
@@ -312,10 +315,7 @@ func (r *Replica) clientListener(conn net.Conn) {
 					val,
 					propose.Timestamp}
 				r.ReplyProposeTS(propreply, writer)
-			}else {
-				if err = propose.Unmarshal(reader); err != nil {
-					break
-				}
+			}else{
 				r.ProposeChan <- &Propose{propose, writer}
 			}
 			break
