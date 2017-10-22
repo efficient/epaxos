@@ -26,6 +26,7 @@ type Parameters struct {
 	IsLeaderless   bool
 	IsFast         bool
 	N              int
+	ReplicaList    []string
 	servers        []net.Conn
 	readers        []*bufio.Reader
 	writers        []*bufio.Writer
@@ -33,7 +34,7 @@ type Parameters struct {
 	done           chan state.Value
 }
 
-func NewParameters() *Parameters{ return &Parameters{ false,0,0, false,false,0,nil,nil,nil,0, make(chan state.Value, 1)} }
+func NewParameters() *Parameters{ return &Parameters{ false,0,0, false,false,0,nil, nil,nil,nil,0, make(chan state.Value, 1)} }
 
 func (b *Parameters) Connect(masterAddr string, masterPort int, leaderless bool, fast bool) {
 
@@ -59,7 +60,8 @@ func (b *Parameters) Connect(masterAddr string, masterPort int, leaderless bool,
 	}
 
 	minLatency := math.MaxFloat64
-	for i := 0; i < len(rlReply.ReplicaList); i++ {
+	b.ReplicaList = rlReply.ReplicaList
+	for i := 0; i < len(b.ReplicaList); i++ {
 		addr := strings.Split(string(rlReply.ReplicaList[i]), ":")[0]
 		if addr == "" {
 			addr = "127.0.0.1"
@@ -73,13 +75,13 @@ func (b *Parameters) Connect(masterAddr string, masterPort int, leaderless bool,
 				minLatency = latency
 			}
 		} else {
-			log.Fatal("cannot connect to " + rlReply.ReplicaList[i])
+			log.Fatal("cannot connect to " + b.ReplicaList[i])
 		}
 	}
 
-	log.Printf("node list %v, closest = (%v,%vms)",rlReply.ReplicaList, b.ClosestReplica, minLatency)
+	log.Printf("node list %v, closest = (%v,%vms)",b.ReplicaList, b.ClosestReplica, minLatency)
 
-	b.N = len(rlReply.ReplicaList)
+	b.N = len(b.ReplicaList)
 
 	b.servers = make([]net.Conn, b.N)
 	b.readers = make([]*bufio.Reader, b.N)
@@ -87,9 +89,9 @@ func (b *Parameters) Connect(masterAddr string, masterPort int, leaderless bool,
 
 	for i := 0; i < b.N; i++ {
 		var err error
-		b.servers[i], err = net.DialTimeout("tcp", rlReply.ReplicaList[i], 10*time.Second)
+		b.servers[i], err = net.DialTimeout("tcp", b.ReplicaList[i], 10*time.Second)
 		if err != nil {
-			log.Fatal("Connection error with ",rlReply.ReplicaList[i])
+			log.Fatal("Connection error with ",b.ReplicaList[i])
 		}else {
 			b.readers[i] = bufio.NewReader(b.servers[i])
 			b.writers[i] = bufio.NewWriter(b.servers[i])
@@ -211,7 +213,20 @@ func (b *Parameters) waitReplies(submitter int) {
 		}
 	case <-timeoutC:
 		e = state.NIL()
-		log.Println("Timeout!")
+		log.Println("Timeout, reconncting ...")
+		var err error
+		b.servers[submitter].Close()
+		b.servers[submitter], err = net.DialTimeout("tcp", b.ReplicaList[submitter], 10*time.Second)
+		if err != nil {
+			if !b.HasFailed {
+				b.HasFailed = true
+			} else {
+				log.Fatal("cannot recover")
+			}
+		}else {
+			b.readers[submitter] = bufio.NewReader(b.servers[submitter])
+			b.writers[submitter] = bufio.NewWriter(b.servers[submitter])
+		}
 	}
 
 	b.done <- e
