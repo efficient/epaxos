@@ -62,7 +62,7 @@ func (b *Parameters) Connect(masterAddr string, masterPort int, leaderless bool,
 	minLatency := math.MaxFloat64
 	b.ReplicaList = rlReply.ReplicaList
 	for i := 0; i < len(b.ReplicaList); i++ {
-		addr := strings.Split(string(rlReply.ReplicaList[i]), ":")[0]
+		addr := strings.Split(string(b.ReplicaList[i]), ":")[0]
 		if addr == "" {
 			addr = "127.0.0.1"
 		}
