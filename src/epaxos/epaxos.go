@@ -1070,6 +1070,7 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 		if !allCommitted {
 			weird++
 		}
+		dlog.Printf("Slow path for instance %d.%d\n", pareply.Replica, pareply.Instance)
 		slow++
 		inst.Status = epaxosproto.ACCEPTED
 		r.bcastAccept(pareply.Replica, pareply.Instance, inst.ballot, int32(len(inst.Cmds)), inst.Seq, inst.Deps)

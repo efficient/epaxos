@@ -7,6 +7,7 @@ import (
 	//"encoding/binary"
 	"encoding/hex"
 	"strconv"
+	"dlog"
 )
 
 type Operation uint8
@@ -92,7 +93,7 @@ func (c *Command) Execute(st *State) Value {
 		   binary.LittleEndian.PutUint64(value[:], uint64(c.V))
 		   st.DB.Set(key[:], value[:], nil)
 		*/
-
+		dlog.Println(c.Op,"(",c.K,",",c.V,")")
 		st.Store[c.K] = c.V
 		return c.V
 
