@@ -64,9 +64,7 @@ fi;
 # Usage of ./bin/client:
 #   -c int
 #     	Percentage of conflicts. Defaults to 0%
-#   -check
-#     	Check that every expected reply was received exactly once.
-#   -e	Egalitarian (no leader). 
+#   -e	Egalitarian (no leader).
 #   -f	Fast Paxos: send message directly to all replicas. 
 #   -id string
 #     	the id of the client. Default is RFC 4122 nodeID.
@@ -80,11 +78,7 @@ fi;
 #     	Payload size for writes. (default 100)
 #   -q int
 #     	Total number of requests.  (default 1000)
-#   -raddr string
-#     	Redis address. Disabled per default.
-#   -rport int
-#     	Redis port. (default 6379)
-#   -v	verbose mode. 
+#   -v	verbose mode.
 #   -w int
 #     	Percentage of updates (writes).  (default 100)
 

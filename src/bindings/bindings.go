@@ -14,13 +14,13 @@ import (
 	"os/exec"
 	"strconv"
 	"time"
-	"dlog"
 )
 
 const TRUE = uint8(1)
 
 type Parameters struct {
-	HasFailed bool
+	verbose        bool
+	HasFailed      bool
 	ClosestReplica int
 	Leader         int
 	IsLeaderless   bool
@@ -34,10 +34,11 @@ type Parameters struct {
 	done           chan state.Value
 }
 
-func NewParameters() *Parameters{ return &Parameters{ false,0,0, false,false,0,nil, nil,nil,nil,0, make(chan state.Value, 1)} }
+func NewParameters() *Parameters{ return &Parameters{ false, false,0,0, false,false,0,nil, nil,nil,nil,0, make(chan state.Value, 1)} }
 
-func (b *Parameters) Connect(masterAddr string, masterPort int, leaderless bool, fast bool) {
+func (b *Parameters) Connect(masterAddr string, masterPort int, verbose bool, leaderless bool, fast bool) {
 
+	b.verbose = verbose
 	b.IsLeaderless = leaderless
 	b.IsFast = fast
 	b.id = 0
@@ -124,6 +125,11 @@ func (b *Parameters) Write(key int64, value []byte) {
 	args.Command.K = state.Key(key)
 	args.Command.V = value
 	args.Command.Op = state.PUT
+
+	if b.verbose{
+		log.Println("PUT(",args.Command.K.String(),",",args.Command.V.String(),")")
+	}
+
 	b.execute(args)
 }
 
@@ -133,6 +139,11 @@ func (b *Parameters) Read(key int64) []byte{
 	args.CommandId = b.id
 	args.Command.K = state.Key(key)
 	args.Command.Op = state.GET
+
+	if b.verbose{
+		log.Println("GET(",args.Command.K.String(),")")
+	}
+
 	return b.execute(args)
 }
 
@@ -142,6 +153,11 @@ func (b *Parameters) Scan(key int64) []byte{
 	args.CommandId = b.id
 	args.Command.K = state.Key(key)
 	args.Command.Op = state.SCAN
+
+	if b.verbose{
+		log.Println("SCAN(",args.Command.K.String(),")")
+	}
+
 	return b.execute(args)
 }
 
@@ -170,9 +186,15 @@ func (b *Parameters) execute(args genericsmrproto.Propose) []byte{
 		}
 	}
 
-	dlog.Println("Sent to ",submitter)
+	if b.verbose{
+		log.Println("Sent to ",submitter)
+	}
 
 	value := <-b.done
+
+	if b.verbose{
+		log.Println("Returning: ",value)
+	}
 
 	return value
 }
