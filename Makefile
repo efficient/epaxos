@@ -9,3 +9,6 @@ compile: deps
 	go install server
 	go install client
 	cd -
+
+test: compile
+	test.sh
