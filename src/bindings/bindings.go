@@ -200,43 +200,14 @@ func (b *Parameters) execute(args genericsmrproto.Propose) []byte{
 }
 
 func (b *Parameters) waitReplies(submitter int) {
-	var e state.Value
+	e := state.NIL()
 	var err error
 
-	timeoutC := make(chan bool, 1)
-	replyC := make(chan genericsmrproto.ProposeReplyTS, 1)
-
-	go func() {
-		time.Sleep(1 * time.Second)
-		timeoutC <- true
-	}()
-
-	go func() {
-		// FIXME handle b.Fast properly
-		rep := new(genericsmrproto.ProposeReplyTS)
-		if err = rep.Unmarshal(b.readers[submitter]); err != nil {
-			log.Println("Error when reading:", err)
-		}
-		replyC <- *rep
-	}()
-
-	select {
-	case reply := <-replyC:
-		if reply.OK == TRUE {
-			e = reply.Value
-		}else{
-			e = state.NIL()
-			log.Println("Failed to receive a response")
-			if !b.HasFailed {
-				b.HasFailed = true
-			} else {
-				log.Fatal("cannot recover")
-			}
-		}
-	case <-timeoutC:
-		e = state.NIL()
-		log.Println("Timeout, reconncting ...")
-		var err error
+	// FIXME handle b.Fast properly
+	rep := new(genericsmrproto.ProposeReplyTS)
+	if err = rep.Unmarshal(b.readers[submitter]); err != nil {
+		log.Println("Error when reading:", err)
+		log.Println("Reconncting ...")
 		b.servers[submitter].Close()
 		b.servers[submitter], err = net.DialTimeout("tcp", b.ReplicaList[submitter], 10*time.Second)
 		if err != nil {
@@ -248,6 +219,17 @@ func (b *Parameters) waitReplies(submitter int) {
 		}else {
 			b.readers[submitter] = bufio.NewReader(b.servers[submitter])
 			b.writers[submitter] = bufio.NewWriter(b.servers[submitter])
+		}
+	} else {
+		if rep.OK == TRUE {
+			e = rep.Value
+		} else {
+			log.Println("Failed to receive a response")
+			if !b.HasFailed {
+				b.HasFailed = true
+			} else {
+				log.Fatal("cannot recover")
+			}
 		}
 	}
 
