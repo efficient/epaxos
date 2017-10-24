@@ -272,7 +272,7 @@ var conflicted, weird, slow, happy int
 func (r *Replica) run() {
 	r.ConnectToPeers()
 
-	r.UpdateClosestQuorum()
+	go r.UpdateClosestQuorum()
 
 	go r.WaitForClientConnections()
 
