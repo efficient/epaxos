@@ -151,7 +151,7 @@ func (na nodeArray) Len() int {
 }
 
 func (na nodeArray) Less(i, j int) bool {
-	return na[i].Seq < na[j].Seq
+	return na[i].Seq < na[j].Seq || (na[i].Seq == na[j].Seq && na[i].Coordinator < na[j].Coordinator)
 }
 
 func (na nodeArray) Swap(i, j int) {

@@ -76,6 +76,7 @@ type Replica struct {
 }
 
 type Instance struct {
+	Coordinator    int32
 	Cmds           []state.Command
 	ballot         int32
 	Status         int8
@@ -834,6 +835,7 @@ func (r *Replica) startPhase1(replica int32, instance int32, ballot int32, propo
 	}
 
 	r.InstanceSpace[r.Id][instance] = &Instance{
+		replica,
 		cmds,
 		ballot,
 		epaxosproto.PREACCEPTED,
@@ -870,6 +872,7 @@ func (r *Replica) startPhase1(replica int32, instance int32, ballot int32, propo
 		}
 
 		r.InstanceSpace[r.Id][instance] = &Instance{
+			replica,
 			cpMarker,
 			0,
 			epaxosproto.PREACCEPTED,
@@ -951,6 +954,7 @@ func (r *Replica) handlePreAccept(preAccept *epaxosproto.PreAccept) {
 		}
 	} else {
 		r.InstanceSpace[preAccept.Replica][preAccept.Instance] = &Instance{
+			preAccept.Replica,
 			preAccept.Command,
 			preAccept.Ballot,
 			status,
@@ -1171,6 +1175,7 @@ func (r *Replica) handleAccept(accept *epaxosproto.Accept) {
 		inst.Deps = accept.Deps
 	} else {
 		r.InstanceSpace[accept.LeaderId][accept.Instance] = &Instance{
+			accept.LeaderId,
 			nil,
 			accept.Ballot,
 			epaxosproto.ACCEPTED,
@@ -1280,6 +1285,7 @@ func (r *Replica) handleCommit(commit *epaxosproto.Commit) {
 		inst.Status = epaxosproto.COMMITTED
 	} else {
 		r.InstanceSpace[commit.Replica][int(commit.Instance)] = &Instance{
+			commit.Replica,
 			commit.Command,
 			0,
 			epaxosproto.COMMITTED,
@@ -1327,6 +1333,7 @@ func (r *Replica) handleCommitShort(commit *epaxosproto.CommitShort) {
 		inst.Status = epaxosproto.COMMITTED
 	} else {
 		r.InstanceSpace[commit.Replica][commit.Instance] = &Instance{
+			commit.Replica,
 			nil,
 			0,
 			epaxosproto.COMMITTED,
@@ -1359,7 +1366,7 @@ func (r *Replica) startRecoveryForInstance(replica int32, instance int32) {
 	var nildeps []int32
 
 	if r.InstanceSpace[replica][instance] == nil {
-		r.InstanceSpace[replica][instance] = &Instance{nil, 0, epaxosproto.NONE, 0, nildeps, nil, 0, 0, nil}
+		r.InstanceSpace[replica][instance] = &Instance{replica,nil, 0, epaxosproto.NONE, 0, nildeps, nil, 0, 0, nil}
 	}
 
 	inst := r.InstanceSpace[replica][instance]
@@ -1390,6 +1397,7 @@ func (r *Replica) handlePrepare(prepare *epaxosproto.Prepare) {
 
 	if inst == nil {
 		r.InstanceSpace[prepare.Replica][prepare.Instance] = &Instance{
+			prepare.Replica,
 			nil,
 			prepare.Ballot,
 			epaxosproto.NONE,
@@ -1449,6 +1457,7 @@ func (r *Replica) handlePrepareReply(preply *epaxosproto.PrepareReply) {
 
 	if preply.Status == epaxosproto.COMMITTED || preply.Status == epaxosproto.EXECUTED {
 		r.InstanceSpace[preply.Replica][preply.Instance] = &Instance{
+			preply.Replica,
 			preply.Command,
 			inst.ballot,
 			epaxosproto.COMMITTED,
@@ -1545,6 +1554,7 @@ func (r *Replica) handlePrepareReply(preply *epaxosproto.PrepareReply) {
 		noop_deps[preply.Replica] = preply.Instance - 1
 		inst.lb.preparing = false
 		r.InstanceSpace[preply.Replica][preply.Instance] = &Instance{
+			preply.Replica,
 			nil,
 			inst.ballot,
 			epaxosproto.ACCEPTED,
@@ -1593,6 +1603,7 @@ func (r *Replica) handleTryPreAccept(tpa *epaxosproto.TryPreAccept) {
 			inst.ballot = tpa.Ballot
 		} else {
 			r.InstanceSpace[tpa.Replica][tpa.Instance] = &Instance{
+				tpa.Replica,
 				tpa.Command,
 				tpa.Ballot,
 				epaxosproto.PREACCEPTED,
