@@ -2,10 +2,10 @@
 
 LOGS=logs
 
-NSERVERS=3
-NCLIENTS=3
-CMDS=5000
-PSIZE=8
+NSERVERS=5
+NCLIENTS=5
+CMDS=10000
+PSIZE=32
 TOTAL_OPS=$(( NCLIENTS * CMDS ))
 
 MASTER=bin/master
@@ -73,17 +73,10 @@ end_exp() {
   done
 
   echo ">>>>> Will check total order..."
-  i=1
-  paste -d: ${all[@]} | while read -r line ; do
-    if [ $((i % 1000)) == 0 ]; then
-      echo ">>>>> Checked ${i} of ${TOTAL_OPS}..."
-    fi
-    unique=$(echo ${line} | sed 's/:/\n/g' | sort -u | wc -l)
-    if [ "${unique}" != "1" ]; then
-      echo -e "#${i}:\n$(echo ${line} | sed 's/:/\n/g')"
-    fi
-    i=$(( i + 1 ))
-  done  
+  for i in $(seq 2 ${NSERVERS}); do
+      diff "${LOGS}/1.ops" "${LOGS}/$i.ops"
+  done
+
 }
 
 start_exp

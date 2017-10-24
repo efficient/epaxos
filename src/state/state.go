@@ -79,7 +79,7 @@ func IsRead(command *Command) bool {
 }
 
 func (c *Command) Execute(st *State) Value {
-	fmt.Printf("Executing (%d, %d)\n", c.K, c.V)
+	//fmt.Printf("Executing (%d, %d)\n", c.K, c.V)
 
 	//var key, value [8]byte
 

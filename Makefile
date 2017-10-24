@@ -1,14 +1,12 @@
 all: compile
 
 deps:
-	go get github.com/google/uuid
+	 GOPATH=`pwd` go get github.com/google/uuid
 
 compile: deps
-	cd src/
-	go install master
-	go install server
-	go install client
-	cd -
+	GOPATH=`pwd` go install master
+	GOPATH=`pwd` go install server
+	GOPATH=`pwd` go install client
 
 test: compile
-	test.sh
+	./test.sh
