@@ -5,7 +5,7 @@ LOGS=logs
 NSERVERS=3
 NCLIENTS=3
 CMDS=5000
-PSIZE=16
+PSIZE=8
 TOTAL_OPS=$(( NCLIENTS * CMDS ))
 
 MASTER=bin/master
@@ -80,7 +80,7 @@ end_exp() {
     fi
     unique=$(echo ${line} | sed 's/:/\n/g' | sort -u | wc -l)
     if [ "${unique}" != "1" ]; then
-      echo -e "[${i}] ->\n$(echo ${line} | sed 's/:/\n/g')"
+      echo -e "#${i}:\n$(echo ${line} | sed 's/:/\n/g')"
     fi
     i=$(( i + 1 ))
   done  
