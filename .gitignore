@@ -1,0 +1,8 @@
+pkg/
+logs/
+stable-store*
+bin/master
+bin/server
+bin/client
+src/github.com/
+*.swp
