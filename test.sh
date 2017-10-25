@@ -83,7 +83,7 @@ end_exp() {
       done
       ;;
     merge)
-		  i=1
+      i=1
       paste -d: ${all[@]} | while read -r line ; do
         if [ $((i % 1000)) == 0 ]; then
           echo ">>>>> Checked ${i} of ${TOTAL_OPS}..."
