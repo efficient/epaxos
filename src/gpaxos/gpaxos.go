@@ -294,8 +294,6 @@ func (r *Replica) run() {
 
 	go r.WaitForClientConnections()
 
-	log.Println("Waiting for client connections")
-
 	/*if r.Exec {
 	    go r.executeCommands()
 	}*/

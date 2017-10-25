@@ -1,14 +1,16 @@
+# default user
+ARG user=otrack
+
 FROM golang
+
+ARG user
 
 WORKDIR /app
 
-ADD https://api.github.com/repos/otrack/epaxos/git/refs/heads/master epaxos-version.json
-RUN git clone https://github.com/otrack/epaxos
-RUN GOPATH=/app/epaxos go get -u github.com/go-redis/redis
-RUN GOPATH=/app/epaxos go get -u github.com/google/uuid
-RUN GOPATH=/app/epaxos go install master
-RUN GOPATH=/app/epaxos go install server
-RUN GOPATH=/app/epaxos go install client
+ADD https://api.github.com/repos/$user/epaxos/git/refs/heads/master epaxos-version.json
+RUN git clone https://github.com/$user/epaxos && \
+    cd epaxos && \
+    make compile
 
 ENV TYPE master
 ENV MADDR localhost

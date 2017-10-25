@@ -9,4 +9,4 @@ compile: deps
 	GOPATH=`pwd` go install client
 
 test: compile
-	./test.sh
+	./bin/test.sh

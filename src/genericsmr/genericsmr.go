@@ -224,6 +224,8 @@ func (r *Replica) waitForPeerConnections(done chan bool) {
 
 /* Client connections dispatcher */
 func (r *Replica) WaitForClientConnections() {
+	log.Println("Waiting for client connections")
+
 	for !r.Shutdown {
 		conn, err := r.Listener.Accept()
 		if err != nil {
