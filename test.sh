@@ -12,6 +12,9 @@ MASTER=bin/master
 SERVER=bin/server
 CLIENT=bin/client
 
+DIFF_TOOL=diff
+#DIFF_TOOL=merge
+
 master() {
   ${MASTER} -N ${NSERVERS} &
 }
@@ -73,10 +76,29 @@ end_exp() {
   done
 
   echo ">>>>> Will check total order..."
-  for i in $(seq 2 ${NSERVERS}); do
-      diff "${LOGS}/1.ops" "${LOGS}/$i.ops"
-  done
-
+  case ${DIFF_TOOL} in
+    diff)
+      for i in $(seq 2 ${NSERVERS}); do
+        diff "${LOGS}/1.ops" "${LOGS}/$i.ops"
+      done
+      ;;
+    merge)
+		  i=1
+      paste -d: ${all[@]} | while read -r line ; do
+        if [ $((i % 1000)) == 0 ]; then
+          echo ">>>>> Checked ${i} of ${TOTAL_OPS}..."
+        fi
+        unique=$(echo ${line} | sed 's/:/\n/g' | sort -u | wc -l)
+        if [ "${unique}" != "1" ]; then
+          echo -e "#${i}:\n$(echo ${line} | sed 's/:/\n/g')"
+        fi
+        i=$(( i + 1 ))
+      done
+      ;;
+    *)
+      echo "Invalid diff tool!"
+      exit -1
+  esac
 }
 
 start_exp
