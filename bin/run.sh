@@ -92,12 +92,15 @@ then
 
     for i in $(seq 1 ${NCLIENTS}); do
         ${DIR}/client ${args} > "logs/c_$i.txt" 2>&1 &
+        echo "> Client $i of ${NCLIENTS} started!"
     done
 
     ended=-1
     while [ ${ended} != ${NCLIENTS} ]; do
         ended=$(cat logs/c_*.txt  | grep "Disconnected" | wc -l)
-        sleep 5
+        echo "> Ended ${ended} of ${NCLIENTS}!"
+        ls -d logs/* | xargs wc -l
+        sleep 10
     done
 
     for i in $(seq 1 ${NCLIENTS}); do
