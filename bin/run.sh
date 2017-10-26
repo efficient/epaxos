@@ -8,7 +8,7 @@ then
     TYPE = [master,server,client] # type of instance
     MPORT, MADDR # master instance
     MPORT, MADDR, ADDR, SPORT, SERVER_EXTRA_ARGS # server instance
-    MPORT, MADDR, CLIENT_EXTRA_ARGS # client instance
+    MPORT, MADDR, NCLIENTS, CLIENT_EXTRA_ARGS # client instance
     ";
     exit 0
 fi;
@@ -87,5 +87,20 @@ if [ "${TYPE}" == "client" ];
 then
     args="-maddr ${MADDR} -mport ${MPORT} ${CLIENT_EXTRA_ARGS}"; 
     echo "client mode: ${args}"
-    ${DIR}/client ${args}
+
+    mkdir -p logs/
+
+    for i in $(seq 1 ${NCLIENTS}); do
+        ${DIR}/client ${args} > "logs/c_$i.txt" 2>&1 &
+    done
+
+    ended=-1
+    while [ ${ended} != ${NCLIENTS} ]; do
+        ended=$(cat logs/c_*.txt  | grep "Disconnected" | wc -l)
+        sleep 5
+    done
+
+    for i in $(seq 1 ${NCLIENTS}); do
+        cat "logs/c_$i.txt"
+    done
 fi;
