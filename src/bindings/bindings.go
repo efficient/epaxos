@@ -88,16 +88,8 @@ func (b *Parameters) Connect(masterAddr string, masterPort int, verbose bool, le
 	b.readers = make([]*bufio.Reader, b.N)
 	b.writers = make([]*bufio.Writer, b.N)
 
-	for i := 0; i < b.N; i++ {
-		var err error
-		b.servers[i], err = net.DialTimeout("tcp", b.ReplicaList[i], 10*time.Second)
-		if err != nil {
-			log.Fatal("Connection error with ",b.ReplicaList[i])
-		}else {
-			b.readers[i] = bufio.NewReader(b.servers[i])
-			b.writers[i] = bufio.NewWriter(b.servers[i])
-		}
-	}
+	var toConnect []int
+	toConnect=append(toConnect,b.ClosestReplica)
 
 	if leaderless == false {
 		reply := new(masterproto.GetLeaderReply)
@@ -105,15 +97,30 @@ func (b *Parameters) Connect(masterAddr string, masterPort int, verbose bool, le
 			log.Fatalf("Error making the GetLeader RPC\n")
 		}
 		b.Leader = reply.LeaderId
+		toConnect =append(toConnect,b.Leader)
 		log.Printf("The Leader is replica %d\n", b.Leader)
 	}
-	log.Printf("Connected")
+
+	for _,i := range toConnect {
+		log.Println("Connection to ", i, " -> ",b.ReplicaList[i])
+		b.servers[i], err = net.DialTimeout("tcp", b.ReplicaList[i], 10*time.Second)
+		if err != nil {
+			log.Fatal("Connection error with ", b.ReplicaList[i])
+		} else {
+			b.readers[i] = bufio.NewReader(b.servers[i])
+			b.writers[i] = bufio.NewWriter(b.servers[i])
+		}
+	}
+
+	log.Println("Connected")
 
 }
 
 func (b *Parameters) Disconnect(){
 	for _,server := range b.servers{
-		server.Close()
+		if server!=nil {
+			server.Close()
+		}
 	}
 	log.Printf("Disconnected")
 }
@@ -171,6 +178,7 @@ func (b *Parameters) execute(args genericsmrproto.Propose) []byte{
 	if (!b.IsLeaderless && args.Command.Op == state.PUT )|| b.HasFailed {
 		submitter = b.Leader
 	}
+
 	go b.waitReplies(submitter)
 
 	if !b.IsFast {
