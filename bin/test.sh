@@ -23,7 +23,7 @@ servers() {
   echo ">>>>> Starting servers..."
   for i in $(seq 1 ${NSERVERS}); do
     port=$(( 7000 + $i ))
-    ${SERVER} -e \
+    ${SERVER}  \
               -port ${port} > "${LOGS}/s_$i.txt" 2>&1 &
   done
 
@@ -38,7 +38,7 @@ servers() {
 clients() {
   echo ">>>>> Starting clients..."
   for i in $(seq 1 $NCLIENTS); do
-    ${CLIENT} -e -v \
+    ${CLIENT}  -v \
               -q ${CMDS} \
               -w 100 \
               -c 100 \

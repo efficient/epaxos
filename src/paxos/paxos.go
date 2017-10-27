@@ -273,19 +273,19 @@ func (r *Replica) bcastPrepare(instance int32, ballot int32, toInfinity bool) {
 	if r.Thrifty {
 		n = r.N >> 1
 	}
-	q := r.Id
 
-	for sent := 0; sent < n; {
-		q = (q + 1) % int32(r.N)
-		if q == r.Id {
-			break
-		}
-		if !r.Alive[q] {
+	sent := 0
+	for q := 0; q < r.N-1; q++ {
+		if !r.Alive[r.PreferredPeerOrder[q]] {
 			continue
 		}
+		r.SendMsg(r.PreferredPeerOrder[q], r.prepareRPC, args)
 		sent++
-		r.SendMsg(q, r.prepareRPC, args)
+		if sent >= n {
+			break
+		}
 	}
+
 }
 
 var pa paxosproto.Accept
@@ -307,19 +307,19 @@ func (r *Replica) bcastAccept(instance int32, ballot int32, command []state.Comm
 	if r.Thrifty {
 		n = r.N >> 1
 	}
-	q := r.Id
 
-	for sent := 0; sent < n; {
-		q = (q + 1) % int32(r.N)
-		if q == r.Id {
-			break
-		}
-		if !r.Alive[q] {
+	sent := 0
+	for q := 0; q < r.N-1; q++ {
+		if !r.Alive[r.PreferredPeerOrder[q]] {
 			continue
 		}
+		r.SendMsg(r.PreferredPeerOrder[q], r.acceptRPC, args)
 		sent++
-		r.SendMsg(q, r.acceptRPC, args)
+		if sent >= n {
+			break
+		}
 	}
+
 }
 
 var pc paxosproto.Commit
