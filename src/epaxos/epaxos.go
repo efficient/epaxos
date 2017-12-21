@@ -302,7 +302,7 @@ func (r *Replica) run() {
 
 		case propose := <-onOffProposeChan:
 			//got a Propose from a client
-			dlog.Printf("Proposal with op %d\n", propose.Command.Op)
+			dlog.Println("Proposal with op "+propose.Command.String())
 			r.handlePropose(propose)
 			//deactivate new proposals channel to prioritize the handling of other protocol messages,
 			//and to allow commands to accumulate for batching
@@ -445,6 +445,7 @@ func (r *Replica) executeCommands() {
 							timeout[q] = 0
 						}
 					} else {
+						dlog.Printf("Problem with instance %d.%d\n", q,inst)
 						problemInstance[q] = inst
 						timeout[q] = 0
 					}
@@ -458,6 +459,8 @@ func (r *Replica) executeCommands() {
 					if inst == r.ExecedUpTo[q]+1 {
 						r.ExecedUpTo[q] = inst
 					}
+				}else{
+					dlog.Printf("Not executed instance %d.%d\n", q,inst)
 				}
 			}
 		}

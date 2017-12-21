@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 	"state"
+	"dlog"
 )
 
 const (
@@ -105,8 +106,10 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 	}
 
 	if v.Lowlink == v.Index {
+		dlog.Printf("Found SCC for %d.%d -> %d",v.Coordinator,v.Seq,v.Deps)
+
 		//found SCC
-		list := stack[l:len(stack)]
+		list := stack[l:]
 
 		//execute commands in the increasing order of the Seq field
 		sort.Sort(nodeArray(list))

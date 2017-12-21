@@ -134,7 +134,7 @@ func (b *Parameters) Write(key int64, value []byte) {
 	args.Command.Op = state.PUT
 
 	if b.verbose{
-		log.Println("PUT(",args.Command.K.String(),",",args.Command.V.String(),")")
+		log.Println(args.Command.String())
 	}
 
 	b.execute(args)
@@ -148,7 +148,7 @@ func (b *Parameters) Read(key int64) []byte{
 	args.Command.Op = state.GET
 
 	if b.verbose{
-		log.Println("GET(",args.Command.K.String(),")")
+		log.Println(args.Command.String())
 	}
 
 	return b.execute(args)
@@ -162,7 +162,7 @@ func (b *Parameters) Scan(key int64) []byte{
 	args.Command.Op = state.SCAN
 
 	if b.verbose{
-		log.Println("SCAN(",args.Command.K.String(),")")
+		log.Println(args.Command.String())
 	}
 
 	return b.execute(args)

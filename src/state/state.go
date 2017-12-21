@@ -78,7 +78,7 @@ func IsRead(command *Command) bool {
 }
 
 func (c *Command) Execute(st *State) Value {
-	// fmt.Printf("Executing (%d, %d)\n", c.K, c.V)
+	dlog.Println("Executing "+c.String())
 
 	//var key, value [8]byte
 
@@ -92,7 +92,6 @@ func (c *Command) Execute(st *State) Value {
 		   binary.LittleEndian.PutUint64(value[:], uint64(c.V))
 		   st.DB.Set(key[:], value[:], nil)
 		*/
-		dlog.Println(c.Op,"(",c.K,",",c.V,")")
 		st.Store[c.K] = c.V
 		return NIL()
 
@@ -120,5 +119,19 @@ func (t *Value) String() string{
 
 func (t *Key) String() string{
 	return strconv.FormatInt(int64(*t), 16)
+}
+
+func (t *Command) String() string{
+	ret := ""
+	if t.Op==PUT {
+		ret = "PUT( " + t.K.String() + " ," + t.V.String() + " )"
+	} else if t.Op==GET {
+		ret="GET( "+t.K.String()+" )"
+	} else if t.Op==SCAN {
+		ret="SCAN( " + t.V.String() + " , " + t.K.String() + " )"
+	} else {
+		ret="UNKNOWN( " + t.V.String() + " , " + t.K.String() + " )"
+	}
+	return ret
 }
 
