@@ -459,8 +459,6 @@ func (r *Replica) executeCommands() {
 					if inst == r.ExecedUpTo[q]+1 {
 						r.ExecedUpTo[q] = inst
 					}
-				}else{
-					dlog.Printf("Not executed instance %d.%d\n", q,inst)
 				}
 			}
 		}
@@ -848,7 +846,7 @@ func (r *Replica) startPhase1(replica int32, instance int32, ballot int32, propo
 	r.updateConflicts(cmds, r.Id, instance, seq)
 
 	if seq >= r.maxSeq {
-		r.maxSeq = seq + 1
+		r.maxSeq = seq
 	}
 
 	r.recordInstanceMetadata(r.InstanceSpace[r.Id][instance])

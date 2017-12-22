@@ -6,7 +6,6 @@ import (
 	//"encoding/binary"
 	"encoding/hex"
 	"strconv"
-	"dlog"
 )
 
 type Operation uint8
@@ -78,7 +77,6 @@ func IsRead(command *Command) bool {
 }
 
 func (c *Command) Execute(st *State) Value {
-	dlog.Println("Executing "+c.String())
 
 	//var key, value [8]byte
 
@@ -124,7 +122,7 @@ func (t *Key) String() string{
 func (t *Command) String() string{
 	ret := ""
 	if t.Op==PUT {
-		ret = "PUT( " + t.K.String() + " ," + t.V.String() + " )"
+		ret = "PUT( " + t.K.String() + " , " + t.V.String() + " )"
 	} else if t.Op==GET {
 		ret="GET( "+t.K.String()+" )"
 	} else if t.Op==SCAN {

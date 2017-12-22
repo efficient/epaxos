@@ -5,7 +5,6 @@ import (
 	"epaxosproto"
 	"genericsmrproto"
 	"sort"
-	"time"
 	"state"
 	"dlog"
 )
@@ -34,6 +33,7 @@ func (e *Exec) executeCommand(replica int32, instance int32) bool {
 		return true
 	}
 	if inst.Status != epaxosproto.COMMITTED {
+		dlog.Printf("Not committed instance %d.%d\n",replica,instance)
 		return false
 	}
 
@@ -48,9 +48,14 @@ var stack []*Instance = make([]*Instance, 0, 100)
 
 func (e *Exec) findSCC(root *Instance) bool {
 	index := 1
-	//find SCCs using Tarjan's algorithm
+	// find SCCs using Tarjan's algorithm
 	stack = stack[0:0]
-	return e.strongconnect(root, &index)
+	ret := e.strongconnect(root, &index)
+	// reset all indexes in the stack
+	for j := 0; j < len(stack); j++ {
+		stack[j].Index = 0
+	}
+	return ret
 }
 
 func (e *Exec) strongconnect(v *Instance, index *int) bool {
@@ -67,31 +72,37 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 	stack = stack[0 : l+1]
 	stack[l] = v
 
+	if v.Cmds == nil {
+		dlog.Printf("Null instance! \n")
+		return false
+	}
+
 	for q := int32(0); q < int32(e.r.N); q++ {
 		inst := v.Deps[q]
 		for i := e.r.ExecedUpTo[q] + 1; i <= inst; i++ {
-			for e.r.InstanceSpace[q][i] == nil || e.r.InstanceSpace[q][i].Cmds == nil || v.Cmds == nil {
-				time.Sleep(1000 * 1000)
+			if e.r.InstanceSpace[q][i] == nil {
+				dlog.Printf("Null instance %d.%d\n",q,i)
+				return false
 			}
-			/*        if !state.Conflict(v.Command, e.r.InstanceSpace[q][i].Command) {
-			          continue
-			          }
-			*/
+
+			if e.r.InstanceSpace[q][i].Cmds == nil {
+				dlog.Printf("Null command %d.%d\n",q,i)
+				return false
+			}
+
 			if e.r.InstanceSpace[q][i].Status == epaxosproto.EXECUTED {
 				continue
 			}
+
 			for e.r.InstanceSpace[q][i].Status != epaxosproto.COMMITTED {
-				time.Sleep(1000 * 1000)
+				dlog.Printf("Not committed instance %d.%d\n",q,i)
+				return false
 			}
+
 			w := e.r.InstanceSpace[q][i]
 
 			if w.Index == 0 {
-				//e.strongconnect(w, index)
 				if !e.strongconnect(w, index) {
-					for j := l; j < len(stack); j++ {
-						stack[j].Index = 0
-					}
-					stack = stack[0:l]
 					return false
 				}
 				if w.Lowlink < v.Lowlink {
@@ -106,18 +117,14 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 	}
 
 	if v.Lowlink == v.Index {
-		dlog.Printf("Found SCC for %d.%d -> %d",v.Coordinator,v.Seq,v.Deps)
-
 		//found SCC
 		list := stack[l:]
 
 		//execute commands in the increasing order of the Seq field
 		sort.Sort(nodeArray(list))
 		for _, w := range list {
-			for w.Cmds == nil {
-				time.Sleep(1000 * 1000)
-			}
 			for idx := 0; idx < len(w.Cmds); idx++ {
+				dlog.Printf("Executing "+w.Cmds[idx].String()+" (%d,%d)[%d], deps=%d",w.Coordinator,w.Seq,idx,w.Deps)
 				if e.r.Dreply && w.lb != nil && w.lb.clientProposals != nil {
 					val := w.Cmds[idx].Execute(e.r.State)
 					e.r.ReplyProposeTS(
@@ -135,6 +142,7 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 		}
 		stack = stack[0:l]
 	}
+
 	return true
 }
 
@@ -154,7 +162,7 @@ func (na nodeArray) Len() int {
 }
 
 func (na nodeArray) Less(i, j int) bool {
-	return na[i].Seq < na[j].Seq || (na[i].Seq == na[j].Seq && na[i].Coordinator < na[j].Coordinator)
+	return na[i].Seq < na[j].Seq || (na[i].Seq == na[j].Seq && na[i].Coordinator < na[j].Coordinator) || (na[i].Seq == na[j].Seq && na[i].Coordinator == na[j].Coordinator && na[i].Cmds[0].String() < na[j].Cmds[0].String())
 }
 
 func (na nodeArray) Swap(i, j int) {
