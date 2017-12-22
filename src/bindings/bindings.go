@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"strconv"
 	"time"
+	"errors"
 )
 
 const TRUE = uint8(1)
@@ -31,7 +32,7 @@ type Parameters struct {
 	readers        []*bufio.Reader
 	writers        []*bufio.Writer
 	id             int32
-	done           chan state.Value
+	done           chan state.Value // FIXME unused
 }
 
 func NewParameters() *Parameters{ return &Parameters{ false, false,0,0, false,false,0,nil, nil,nil,nil,0, make(chan state.Value, 1)} }
@@ -179,26 +180,31 @@ func (b *Parameters) execute(args genericsmrproto.Propose) []byte{
 		submitter = b.Leader
 	}
 
-	go b.waitReplies(submitter)
+	err:=errors.New("")
+	value:=state.NIL()
 
-	if !b.IsFast {
-		b.writers[submitter].WriteByte(genericsmrproto.PROPOSE)
-		args.Marshal(b.writers[submitter])
-		b.writers[submitter].Flush()
-	} else {
-		//send to everyone
-		for rep := 0; rep < b.N; rep++ {
-			b.writers[rep].WriteByte(genericsmrproto.PROPOSE)
-			args.Marshal(b.writers[rep])
-			b.writers[rep].Flush()
+	for err!=nil {
+
+		if !b.IsFast {
+			b.writers[submitter].WriteByte(genericsmrproto.PROPOSE)
+			args.Marshal(b.writers[submitter])
+			b.writers[submitter].Flush()
+		} else {
+			//send to everyone
+			for rep := 0; rep < b.N; rep++ {
+				b.writers[rep].WriteByte(genericsmrproto.PROPOSE)
+				args.Marshal(b.writers[rep])
+				b.writers[rep].Flush()
+			}
 		}
-	}
 
-	if b.verbose{
-		log.Println("Sent to ",submitter)
-	}
+		if b.verbose {
+			log.Println("Sent to ", submitter)
+		}
 
-	value := <-b.done
+		value, err = b.waitReplies(submitter)
+
+	}
 
 	if b.verbose{
 		log.Println("Returning: ",value)
@@ -207,22 +213,22 @@ func (b *Parameters) execute(args genericsmrproto.Propose) []byte{
 	return value
 }
 
-func (b *Parameters) waitReplies(submitter int) {
-	e := state.NIL()
+func (b *Parameters) waitReplies(submitter int) (state.Value,error) {
 	var err error
+	ret := state.NIL()
 
 	// FIXME handle b.Fast properly
 	rep := new(genericsmrproto.ProposeReplyTS)
 	if err = rep.Unmarshal(b.readers[submitter]); err != nil {
 		log.Println("Error when reading:", err)
-		log.Println("Reconncting ...")
-		b.servers[submitter].Close()
+		log.Println("Reconnecting ...")
+		if b.servers[submitter]!=nil{ b.servers[submitter].Close()}
 		b.servers[submitter], err = net.DialTimeout("tcp", b.ReplicaList[submitter], 10*time.Second)
 		if err != nil {
 			if !b.HasFailed {
 				b.HasFailed = true
 			} else {
-				log.Fatal("cannot recover")
+				log.Fatal("Cannot recover, failed twice")
 			}
 		}else {
 			b.readers[submitter] = bufio.NewReader(b.servers[submitter])
@@ -230,7 +236,7 @@ func (b *Parameters) waitReplies(submitter int) {
 		}
 	} else {
 		if rep.OK == TRUE {
-			e = rep.Value
+			ret = rep.Value
 		} else {
 			log.Println("Failed to receive a response")
 			if !b.HasFailed {
@@ -241,5 +247,5 @@ func (b *Parameters) waitReplies(submitter int) {
 		}
 	}
 
-	b.done <- e
+	return ret,err
 }

@@ -71,7 +71,7 @@ end_exp() {
     all=()
     for i in $(seq 1 ${NSERVERS}); do
 	f="${LOGS}/$i.ops"
-	cat "${LOGS}/s_$i.txt" | grep "Executing" | cut -d',' -f 2 | cut -d' ' -f 1 > ${f} 
+	cat "${LOGS}/s_$i.txt" | grep "Executing" | cut -d',' -f 2 | cut -d' ' -f 2 > ${f} 
 	all+=(${f})
     done
 

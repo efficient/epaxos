@@ -14,6 +14,7 @@ import (
 	"state"
 	"time"
 	"sync"
+	"dlog"
 )
 
 const CHAN_BUFFER_SIZE = 200000
@@ -280,7 +281,7 @@ func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
 				}
 				rpair.Chan <- obj
 			} else {
-				log.Println("Error: received unknown message type")
+				log.Fatal("Error: received unknown message type ", msgType," from  ", rid)
 			}
 		}
 	}
@@ -350,11 +351,16 @@ func (r *Replica) RegisterRPC(msgObj fastrpc.Serializable, notify chan fastrpc.S
 	code := r.rpcCode
 	r.rpcCode++
 	r.rpcTable[code] = &RPCPair{msgObj, notify}
+	dlog.Println("registering RPC ",r.rpcCode)
 	return code
 }
 
 func (r *Replica) SendMsg(peerId int32, code uint8, msg fastrpc.Serializable) {
 	w := r.PeerWriters[peerId]
+	if w==nil{
+		log.Printf("Connection to %d lost!\n", peerId)
+		return
+	}
 	w.WriteByte(code)
 	msg.Marshal(w)
 	w.Flush()
@@ -362,6 +368,10 @@ func (r *Replica) SendMsg(peerId int32, code uint8, msg fastrpc.Serializable) {
 
 func (r *Replica) SendMsgNoFlush(peerId int32, code uint8, msg fastrpc.Serializable) {
 	w := r.PeerWriters[peerId]
+	if w==nil{
+		log.Printf("Connection to %d lost!\n", peerId)
+		return
+	}
 	w.WriteByte(code)
 	msg.Marshal(w)
 }
@@ -385,6 +395,10 @@ func (r *Replica) ReplyProposeTS(reply *genericsmrproto.ProposeReplyTS, w *bufio
 func (r *Replica) SendBeacon(peerId int32) {
 	log.Println("sending beacon to ",peerId)
 	w := r.PeerWriters[peerId]
+	if w==nil{
+		log.Printf("Connection to %d lost!\n", peerId)
+		return
+	}
 	w.WriteByte(genericsmrproto.GENERIC_SMR_BEACON)
 	beacon := &genericsmrproto.Beacon{rdtsc.Cputicks()}
 	beacon.Marshal(w)
@@ -393,6 +407,10 @@ func (r *Replica) SendBeacon(peerId int32) {
 
 func (r *Replica) ReplyBeacon(beacon *Beacon) {
 	w := r.PeerWriters[beacon.Rid]
+	if w==nil{
+		log.Printf("Connection to %d lost!\n", beacon.Rid)
+		return
+	}
 	w.WriteByte(genericsmrproto.GENERIC_SMR_BEACON_REPLY)
 	rb := &genericsmrproto.BeaconReply{beacon.Timestamp}
 	rb.Marshal(w)
@@ -456,7 +474,7 @@ func (r *Replica) UpdateClosestQuorum() {
 	r.mutex.Unlock()
 
 	r.UpdatePreferredPeerOrder(quorum)
-	log.Println("Closest quorum: ", quorum)
+	log.Println("Closest quorum: ", r.PreferredPeerOrder)
 	time.Sleep(10 * time.Second)
 
 }
