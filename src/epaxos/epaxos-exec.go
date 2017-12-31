@@ -73,7 +73,7 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 	stack[l] = v
 
 	if v.Cmds == nil {
-		dlog.Printf("Null command! \n")
+		dlog.Printf("Null instance! \n")
 		return false
 	}
 
@@ -86,7 +86,7 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 			}
 
 			if e.r.InstanceSpace[q][i].Cmds == nil {
-				dlog.Printf("Null command, instance %d.%d\n",q,i)
+				dlog.Printf("Null command %d.%d\n",q,i)
 				return false
 			}
 
@@ -95,7 +95,7 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 			}
 
 			for e.r.InstanceSpace[q][i].Status != epaxosproto.COMMITTED {
-				dlog.Printf("Not committed,instance %d.%d\n",q,i)
+				dlog.Printf("Not committed instance %d.%d\n",q,i)
 				return false
 			}
 
@@ -123,12 +123,9 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 		//execute commands in the increasing order of the Seq field
 		sort.Sort(nodeArray(list))
 		for _, w := range list {
-			if len(w.Cmds)==0{
-				dlog.Printf("Nothing to execute in %d,%d", w.Coordinator,w.Seq)
-			}
 			for idx := 0; idx < len(w.Cmds); idx++ {
-				dlog.Printf("Executing "+w.Cmds[idx].String()+" coord=%d, seq=%d [#%d], deps=%d",w.Coordinator,w.Seq,idx,w.Deps)
-				if e.r.Dreply && w.Coordinator == e.r.Id {
+				dlog.Printf("Executing "+w.Cmds[idx].String()+" (%d,%d)[%d], deps=%d",w.Coordinator,w.Seq,idx,w.Deps)
+				if e.r.Dreply && w.lb != nil && w.lb.clientProposals != nil {
 					val := w.Cmds[idx].Execute(e.r.State)
 
 					e.r.ReplyProposeTS(
