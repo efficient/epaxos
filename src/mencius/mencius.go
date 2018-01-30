@@ -188,12 +188,6 @@ func (r *Replica) run() {
 
 		select {
 
-		case propose := <-r.ProposeChan:
-			//got a Propose from a client
-			dlog.Printf("Proposal with id %d\n", propose.CommandId)
-			r.handlePropose(propose)
-			break
-
 		case skipS := <-r.skipChan:
 			skip := skipS.(*menciusproto.Skip)
 			//got a Skip from another replica
@@ -252,6 +246,13 @@ func (r *Replica) run() {
 				r.forceCommit()
 			}
 			break
+
+		case propose := <-r.ProposeChan:
+			//got a Propose from a client
+			dlog.Printf("Proposal with id %d\n", propose.CommandId)
+			r.handlePropose(propose)
+			break
+
 		}
 	}
 }

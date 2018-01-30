@@ -153,6 +153,8 @@ func (r *Replica) ConnectToPeers() {
 		r.Alive[i] = true
 		r.PeerReaders[i] = bufio.NewReader(r.Peers[i])
 		r.PeerWriters[i] = bufio.NewWriter(r.Peers[i])
+
+		log.Printf("OUT Connected to %d", i)
 	}
 	<-done
 	log.Printf("Replica id: %d. Done connecting to peers\n", r.Id)
@@ -218,6 +220,8 @@ func (r *Replica) waitForPeerConnections(done chan bool) {
 		r.PeerReaders[id] = bufio.NewReader(conn)
 		r.PeerWriters[id] = bufio.NewWriter(conn)
 		r.Alive[id] = true
+
+		log.Printf("IN Connected to %d", id)
 	}
 
 	done <- true
@@ -256,7 +260,6 @@ func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
 			if err = gbeacon.Unmarshal(reader); err != nil {
 				break
 			}
-			log.Println("receive beacon from ",rid)
 			beacon := &Beacon{int32(rid), gbeacon.Timestamp}
 			r.ReplyBeacon(beacon)
 			break
@@ -393,7 +396,8 @@ func (r *Replica) ReplyProposeTS(reply *genericsmrproto.ProposeReplyTS, w *bufio
 }
 
 func (r *Replica) SendBeacon(peerId int32) {
-	log.Println("sending beacon to ",peerId)
+	dlog.Println("sending beacon to ",peerId)
+	r.mutex.Lock()
 	w := r.PeerWriters[peerId]
 	if w==nil{
 		log.Printf("Connection to %d lost!\n", peerId)
@@ -403,9 +407,12 @@ func (r *Replica) SendBeacon(peerId int32) {
 	beacon := &genericsmrproto.Beacon{rdtsc.Cputicks()}
 	beacon.Marshal(w)
 	w.Flush()
+	r.mutex.Unlock()
 }
 
 func (r *Replica) ReplyBeacon(beacon *Beacon) {
+	dlog.Println("replying beacon to ",beacon.Rid)
+	r.mutex.Lock()
 	w := r.PeerWriters[beacon.Rid]
 	if w==nil{
 		log.Printf("Connection to %d lost!\n", beacon.Rid)
@@ -415,6 +422,7 @@ func (r *Replica) ReplyBeacon(beacon *Beacon) {
 	rb := &genericsmrproto.BeaconReply{beacon.Timestamp}
 	rb.Marshal(w)
 	w.Flush()
+	r.mutex.Unlock()
 }
 
 // updates the preferred order in which to communicate with peers according to a preferred quorum
@@ -453,11 +461,13 @@ func (r *Replica) UpdateClosestQuorum() {
 			continue
 		}
 		if r.Alive[i] {
-			r.SendBeacon(int32(i))
+			for j := 0; j < 10; j++ {
+				r.SendBeacon(int32(i))
+			}
 		}
 	}
 
-	time.Sleep(3 * time.Second)
+	time.Sleep(5 * time.Second)
 
 	quorum := make([]int32, r.N)
 
@@ -474,7 +484,5 @@ func (r *Replica) UpdateClosestQuorum() {
 	r.mutex.Unlock()
 
 	r.UpdatePreferredPeerOrder(quorum)
-	log.Println("Closest quorum: ", r.PreferredPeerOrder)
-	time.Sleep(10 * time.Second)
 
 }

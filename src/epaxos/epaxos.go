@@ -80,7 +80,7 @@ type Replica struct {
 type Instance struct {
 	Coordinator    int32
 	Cmds           []state.Command
-	ballot         int32
+ 	ballot         int32
 	Status         int8
 	Seq            int32
 	Deps           []int32
@@ -232,7 +232,7 @@ var slowClockChan chan bool
 
 func (r *Replica) fastClock() {
 	for !r.Shutdown {
-		time.Sleep(1 * 1e6) // 5 ms
+		time.Sleep(5 * 1e6) // 5 ms
 		fastClockChan <- true
 	}
 }
@@ -276,16 +276,16 @@ func (r *Replica) run() {
 
 	r.UpdateClosestQuorum()
 
-	go r.WaitForClientConnections()
+	log.Println("Closest quorum: ", r.PreferredPeerOrder)
 
 	slowClockChan = make(chan bool, 1)
 	fastClockChan = make(chan bool, 1)
 	go r.slowClock()
 
 	//Enabled when batching for 5ms
-	if MAX_BATCH > 100 {
-		go r.fastClock()
-	}
+ 	//if MAX_BATCH > 100 {
+	//	go r.fastClock()
+	//}
 
 	if r.Beacon {
 		go r.stopAdapting()
@@ -302,23 +302,16 @@ func (r *Replica) run() {
 
 	rand.Seed(time.Now().UnixNano())
 
+	go r.WaitForClientConnections()
+
 	for !r.Shutdown {
 
 		select {
 
-		case propose := <-onOffProposeChan:
-			//got a Propose from a client
-			dlog.Println("Proposal with op "+propose.Command.String())
-			r.handlePropose(propose)
-			//deactivate new proposals channel to prioritize the handling of other protocol messages,
-			//and to allow commands to accumulate for batching
-			onOffProposeChan = nil
-			break
-
-		case <-fastClockChan:
-			//activate new proposals channel
-			onOffProposeChan = r.ProposeChan
-			break
+		//case <-fastClockChan:
+		//	//activate new proposals channel
+		//	onOffProposeChan = r.ProposeChan
+		//	break
 
 		case prepareS := <-r.prepareChan:
 			prepare := prepareS.(*epaxosproto.Prepare)
@@ -394,6 +387,7 @@ func (r *Replica) run() {
 			break
 
 		case <-slowClockChan:
+			dlog.Println("Slow clock")
 			if r.Beacon {
 				log.Printf("weird %d; conflicted %d; slow %d; happy %d\n", weird, conflicted, slow, happy)
 				weird, conflicted, slow, happy = 0, 0, 0, 0
@@ -408,6 +402,17 @@ func (r *Replica) run() {
 
 		case iid := <-r.instancesToRecover:
 			r.startRecoveryForInstance(iid.replica, iid.instance)
+			break
+
+		case propose := <-onOffProposeChan:
+			//got a Propose from a client
+			dlog.Println("Proposal with op "+propose.Command.String())
+			r.handlePropose(propose)
+			//deactivate new proposals channel to prioritize the handling of other protocol messages,
+			//and to allow commands to accumulate for batching
+			// onOffProposeChan = nil
+			break
+
 		}
 
 		if r.Exec {
@@ -421,28 +426,21 @@ func (r *Replica) run() {
 						}
 						continue
 					}
-					if r.InstanceSpace[q][inst] == nil || r.InstanceSpace[q][inst].Status != epaxosproto.COMMITTED{
+					if r.InstanceSpace[q][inst] == nil || r.InstanceSpace[q][inst].Status != epaxosproto.COMMITTED || !r.exec.executeCommand(int32(q), inst) {
 						if inst == problemInstance[q] {
 							if now > timeout[q] {
 								r.instancesToRecover <- &instanceId{int32(q), inst}
 								timeout[q] = now + COMMIT_GRACE_PERIOD
 							}
 						} else {
+							dlog.Println("Problem at instance %d.%d",q,inst)
 							problemInstance[q] = inst
 							timeout[q] = now + COMMIT_GRACE_PERIOD
-							//if rand.Intn(100) <= 100 && r.Id==0 {
-							//	timeout[q] = now
-							//}
 						}
-						//if r.InstanceSpace[q][inst] == nil {
-						//	continue
-						//}
 						break // stop at the first problematic instance
 					}
-					if ok := r.exec.executeCommand(int32(q), inst); ok {
-						if inst == r.ExecedUpTo[q]+1 {
-							r.ExecedUpTo[q] = inst
-						}
+					if inst == r.ExecedUpTo[q]+1 {
+						r.ExecedUpTo[q] = inst
 					}
 				}
 			}
@@ -692,7 +690,7 @@ func (r *Replica) bcastCommit(replica int32, instance int32, cmds []state.Comman
 		if !r.Alive[r.PreferredPeerOrder[q]] {
 			continue
 		}
-		dlog.Printf("Sending Commit %d.%d to %d\n", replica, instance, q)
+		dlog.Printf("Sending Commit %d.%d to %d\n", replica, instance, r.PreferredPeerOrder[q])
 		r.SendMsg(r.PreferredPeerOrder[q], r.commitRPC, ec)
 	}
 }
