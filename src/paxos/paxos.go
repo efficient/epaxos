@@ -41,6 +41,7 @@ type Replica struct {
 	counter             int
 	flush               bool
 	committedUpTo       int32
+	executedUpTo        int32
 }
 
 type InstanceStatus int
@@ -83,6 +84,7 @@ func NewReplica(id int, peerAddrList []string, Isleader bool, thrifty bool, exec
 		false,
 		0,
 		true,
+		-1,
 		-1}
 
 	r.Durable = durable
@@ -156,7 +158,7 @@ var clockChan chan bool
 
 func (r *Replica) clock() {
 	for !r.Shutdown {
-		time.Sleep(1000 * 1000 * 1)
+		time.Sleep(1000 * 1000 * 5)
 		clockChan <- true
 	}
 }
@@ -175,12 +177,8 @@ func (r *Replica) run() {
 
 	go r.WaitForClientConnections()
 
-	if r.Exec {
-		go r.executeCommands()
-	}
-
 	clockChan = make(chan bool, 1)
-	go r.clock()
+//	go r.clock()
 
 	onOffProposeChan := r.ProposeChan
 
@@ -191,14 +189,6 @@ func (r *Replica) run() {
 		case <-clockChan:
 			//activate the new proposals channel
 			onOffProposeChan = r.ProposeChan
-			break
-
-		case propose := <-onOffProposeChan:
-			//got a Propose from a client
-			dlog.Printf("Proposal with op %d\n", propose.Command.Op)
-			r.handlePropose(propose)
-			//deactivate the new proposals channel to prioritize the handling of protocol messages
-			onOffProposeChan = nil
 			break
 
 		case prepareS := <-r.prepareChan:
@@ -242,7 +232,21 @@ func (r *Replica) run() {
 			dlog.Printf("Received AcceptReply for instance %d\n", acceptReply.Instance)
 			r.handleAcceptReply(acceptReply)
 			break
+
+		case propose := <-onOffProposeChan:
+			//got a Propose from a client
+			dlog.Printf("Proposal with op %d\n", propose.Command)
+			r.handlePropose(propose)
+			//deactivate the new proposals channel to prioritize the handling of protocol messages
+			//onOffProposeChan = nil
+			break
+
 		}
+
+		if r.Exec {
+			r.executeCommands()
+		}
+
 	}
 }
 
@@ -666,13 +670,13 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 }
 
 func (r *Replica) executeCommands() {
-	i := int32(0)
-	for !r.Shutdown {
-		executed := false
+	executedUpTo := int32(0)
+	// for !r.Shutdown {
+	//	executed := false
 
-		for i <= r.committedUpTo {
-			if r.instanceSpace[i].cmds != nil {
-				inst := r.instanceSpace[i]
+		for executedUpTo <= r.committedUpTo {
+			if r.instanceSpace[executedUpTo].cmds != nil {
+				inst := r.instanceSpace[executedUpTo]
 				for j := 0; j < len(inst.cmds); j++ {
 					if r.Dreply && inst.lb != nil && inst.lb.clientProposals != nil {
 						val := inst.cmds[j].Execute(r.State)
@@ -686,16 +690,16 @@ func (r *Replica) executeCommands() {
 						inst.cmds[j].Execute(r.State)
 					}
 				}
-				i++
-				executed = true
+				executedUpTo++
+				//executed = true
 			} else {
 				break
 			}
 		}
 
-		if !executed {
-			time.Sleep(1000 * 1000)
-		}
-	}
+	//	if !executed {
+	//		time.Sleep(1000 * 1000)
+	//	}
+	//}
 
 }
