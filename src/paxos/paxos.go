@@ -183,9 +183,9 @@ func (r *Replica) run() {
 	//go r.clock()
 	//onOffProposeChan := r.ProposeChan
 
-	for !r.Shutdown {
+	executedUpTo := int32(0)
 
-		executedUpTo := int32(0)
+	for !r.Shutdown {
 
 		select {
 
