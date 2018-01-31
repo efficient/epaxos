@@ -276,8 +276,6 @@ func (r *Replica) run() {
 
 	r.UpdateClosestQuorum()
 
-	log.Println("Closest quorum: ", r.PreferredPeerOrder)
-
 	slowClockChan = make(chan bool, 1)
 	fastClockChan = make(chan bool, 1)
 	go r.slowClock()

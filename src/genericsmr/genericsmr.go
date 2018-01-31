@@ -268,11 +268,11 @@ func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
 			if err = gbeaconReply.Unmarshal(reader); err != nil {
 				break
 			}
-			dlog.Println("receive beacon reply from ",rid)
+			log.Println("receive beacon ", gbeaconReply.Timestamp, " reply from ",rid)
 			//TODO: UPDATE STUFF
 			r.mutex.Lock()
-			r.Latencies[rid] = rdtsc.Cputicks()-gbeaconReply.Timestamp
-			log.Printf(" %d -> %d ", rid, r.Latencies[rid])
+			r.Latencies[rid] += rdtsc.Cputicks()-gbeaconReply.Timestamp
+			log.Println(rid, " -> ", r.Latencies[rid])
 			r.mutex.Unlock()
 			r.Ewma[rid] = 0.99*r.Ewma[rid] + 0.01*float64(rdtsc.Cputicks()-gbeaconReply.Timestamp)
 			break
@@ -397,7 +397,6 @@ func (r *Replica) ReplyProposeTS(reply *genericsmrproto.ProposeReplyTS, w *bufio
 }
 
 func (r *Replica) SendBeacon(peerId int32) {
-	dlog.Println("sending beacon to ",peerId)
 	r.mutex.Lock()
 	w := r.PeerWriters[peerId]
 	if w==nil{
@@ -408,6 +407,7 @@ func (r *Replica) SendBeacon(peerId int32) {
 	beacon := &genericsmrproto.Beacon{rdtsc.Cputicks()}
 	beacon.Marshal(w)
 	w.Flush()
+	log.Println("send beacon ", beacon.Timestamp, " to ", peerId)
 	r.mutex.Unlock()
 }
 
