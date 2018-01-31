@@ -75,13 +75,7 @@ func main() {
 		if put[j] {
 			value :=make([]byte,*psize)
 			rand.Read(value)
-			if j == 0 {
-				fmt.Printf("> first command START\n")
-			}
 			proxy.Write(int64(karray[j]),state.Value(value))
-			if j == 0 {
-				fmt.Printf("> first command END\n")
-			}
 		} else {
 			proxy.Read(int64(karray[j]))
 		}

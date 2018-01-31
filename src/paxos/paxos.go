@@ -41,7 +41,6 @@ type Replica struct {
 	counter             int
 	flush               bool
 	committedUpTo       int32
-	executedUpTo        int32
 }
 
 type InstanceStatus int
@@ -84,7 +83,6 @@ func NewReplica(id int, peerAddrList []string, Isleader bool, thrifty bool, exec
 		false,
 		0,
 		true,
-		-1,
 		-1}
 
 	r.Durable = durable
@@ -158,7 +156,7 @@ var clockChan chan bool
 
 func (r *Replica) clock() {
 	for !r.Shutdown {
-		time.Sleep(1000 * 1000 * 5)
+		time.Sleep(1000 * 1000 * 1)
 		clockChan <- true
 	}
 }
@@ -177,18 +175,31 @@ func (r *Replica) run() {
 
 	go r.WaitForClientConnections()
 
-	clockChan = make(chan bool, 1)
-//	go r.clock()
+	//if r.Exec {
+	//	go r.executeCommands()
+	//}
 
-	onOffProposeChan := r.ProposeChan
+	//clockChan = make(chan bool, 1)
+	//go r.clock()
+	//onOffProposeChan := r.ProposeChan
 
 	for !r.Shutdown {
 
+		executedUpTo := int32(0)
+
 		select {
 
-		case <-clockChan:
-			//activate the new proposals channel
-			onOffProposeChan = r.ProposeChan
+		//case <-clockChan:
+		//	//activate the new proposals channel
+		//	onOffProposeChan = r.ProposeChan
+		//	break
+
+		case propose := <- r.ProposeChan:
+			//got a Propose from a client
+			dlog.Printf("Proposal with op %d\n", propose.Command.Op)
+			r.handlePropose(propose)
+			//deactivate the new proposals channel to prioritize the handling of protocol messages
+			//onOffProposeChan = nil
 			break
 
 		case prepareS := <-r.prepareChan:
@@ -232,19 +243,30 @@ func (r *Replica) run() {
 			dlog.Printf("Received AcceptReply for instance %d\n", acceptReply.Instance)
 			r.handleAcceptReply(acceptReply)
 			break
-
-		case propose := <-onOffProposeChan:
-			//got a Propose from a client
-			dlog.Printf("Proposal " + propose.Command.String())
-			r.handlePropose(propose)
-			//deactivate the new proposals channel to prioritize the handling of protocol messages
-			//onOffProposeChan = nil
-			break
-
 		}
 
 		if r.Exec {
-			r.executeCommands()
+			for executedUpTo <= r.committedUpTo {
+				if r.instanceSpace[executedUpTo].cmds != nil {
+					inst := r.instanceSpace[executedUpTo]
+					for j := 0; j < len(inst.cmds); j++ {
+						if r.Dreply && inst.lb != nil && inst.lb.clientProposals != nil {
+							val := inst.cmds[j].Execute(r.State)
+							propreply := &genericsmrproto.ProposeReplyTS{
+								TRUE,
+								inst.lb.clientProposals[j].CommandId,
+								val,
+								inst.lb.clientProposals[j].Timestamp}
+							r.ReplyProposeTS(propreply, inst.lb.clientProposals[j].Reply)
+						} else if inst.cmds[j].Op == state.PUT {
+							inst.cmds[j].Execute(r.State)
+						}
+					}
+					executedUpTo ++
+				} else {
+					break
+				}
+			}
 		}
 
 	}
@@ -669,37 +691,37 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 	}
 }
 
-func (r *Replica) executeCommands() {
-	executedUpTo := int32(0)
-	// for !r.Shutdown {
-	//	executed := false
-
-		for executedUpTo <= r.committedUpTo {
-			if r.instanceSpace[executedUpTo].cmds != nil {
-				inst := r.instanceSpace[executedUpTo]
-				for j := 0; j < len(inst.cmds); j++ {
-					if r.Dreply && inst.lb != nil && inst.lb.clientProposals != nil {
-						val := inst.cmds[j].Execute(r.State)
-						propreply := &genericsmrproto.ProposeReplyTS{
-							TRUE,
-							inst.lb.clientProposals[j].CommandId,
-							val,
-							inst.lb.clientProposals[j].Timestamp}
-						r.ReplyProposeTS(propreply, inst.lb.clientProposals[j].Reply)
-					} else if inst.cmds[j].Op == state.PUT {
-						inst.cmds[j].Execute(r.State)
-					}
-				}
-				executedUpTo++
-				//executed = true
-			} else {
-				break
-			}
-		}
-
-	//	if !executed {
-	//		time.Sleep(1000 * 1000)
-	//	}
-	//}
-
-}
+//func (r *Replica) executeCommands() {
+//	i := int32(0)
+//	for !r.Shutdown {
+//		executed := false
+//
+//		for i <= r.committedUpTo {
+//			if r.instanceSpace[i].cmds != nil {
+//				inst := r.instanceSpace[i]
+//				for j := 0; j < len(inst.cmds); j++ {
+//					if r.Dreply && inst.lb != nil && inst.lb.clientProposals != nil {
+//						val := inst.cmds[j].Execute(r.State)
+//						propreply := &genericsmrproto.ProposeReplyTS{
+//							TRUE,
+//							inst.lb.clientProposals[j].CommandId,
+//							val,
+//							inst.lb.clientProposals[j].Timestamp}
+//						r.ReplyProposeTS(propreply, inst.lb.clientProposals[j].Reply)
+//					} else if inst.cmds[j].Op == state.PUT {
+//						inst.cmds[j].Execute(r.State)
+//					}
+//				}
+//				i++
+//				executed = true
+//			} else {
+//				break
+//			}
+//		}
+//
+//		if !executed {
+//			time.Sleep(1000 * 1000)
+//		}
+//	}
+//
+//}
