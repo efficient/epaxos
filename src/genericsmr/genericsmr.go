@@ -272,6 +272,7 @@ func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
 			//TODO: UPDATE STUFF
 			r.mutex.Lock()
 			r.Latencies[rid] = rdtsc.Cputicks()-gbeaconReply.Timestamp
+			log.Printf(" %d -> %d ", rid, r.Latencies[rid])
 			r.mutex.Unlock()
 			r.Ewma[rid] = 0.99*r.Ewma[rid] + 0.01*float64(rdtsc.Cputicks()-gbeaconReply.Timestamp)
 			break
