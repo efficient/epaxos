@@ -58,11 +58,11 @@ type ProposeAndReadReply struct {
 // handling stalls and failures
 
 type Beacon struct {
-	Timestamp uint64
+	Timestamp int64
 }
 
 type BeaconReply struct {
-	Timestamp uint64
+	Timestamp int64
 }
 
 type PingArgs struct {

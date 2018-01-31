@@ -135,7 +135,7 @@ func (t *BeaconReply) Unmarshal(wire io.Reader) error {
 	if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
 		return err
 	}
-	t.Timestamp = uint64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
+	t.Timestamp = int64(int64(bs[0]) | (int64(bs[1]) << 8) | (int64(bs[2]) << 16) | (int64(bs[3]) << 24) | (int64(bs[4]) << 32) | (int64(bs[5]) << 40) | (int64(bs[6]) << 48) | (int64(bs[7]) << 56))
 	return nil
 }
 
@@ -445,7 +445,7 @@ func (t *Beacon) Unmarshal(wire io.Reader) error {
 	if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
 		return err
 	}
-	t.Timestamp = uint64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
+	t.Timestamp = int64(int64(bs[0]) | (int64(bs[1]) << 8) | (int64(bs[2]) << 16) | (int64(bs[3]) << 24) | (int64(bs[4]) << 32) | (int64(bs[5]) << 40) | (int64(bs[6]) << 48) | (int64(bs[7]) << 56))
 	return nil
 }
 

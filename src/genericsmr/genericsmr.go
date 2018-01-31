@@ -10,7 +10,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"rdtsc"
 	"state"
 	"time"
 	"sync"
@@ -33,7 +32,7 @@ type Propose struct {
 
 type Beacon struct {
 	Rid       int32
-	Timestamp uint64
+	Timestamp int64
 }
 
 type Replica struct {
@@ -68,7 +67,7 @@ type Replica struct {
 	rpcCode  uint8
 
 	Ewma []float64
-	Latencies []uint64
+	Latencies []int64
 
 	mutex sync.Mutex
 }
@@ -98,7 +97,7 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bo
 		make(map[uint8]*RPCPair),
 		genericsmrproto.GENERIC_SMR_BEACON_REPLY + 1,
 		make([]float64, len(peerAddrList)),
-		make([]uint64, len(peerAddrList)),
+		make([]int64, len(peerAddrList)),
 		sync.Mutex{}}
 
 	var err error
@@ -271,10 +270,10 @@ func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
 			log.Println("receive beacon ", gbeaconReply.Timestamp, " reply from ",rid)
 			//TODO: UPDATE STUFF
 			r.mutex.Lock()
-			r.Latencies[rid] += rdtsc.Cputicks()-gbeaconReply.Timestamp
+			r.Latencies[rid] += time.Now().UnixNano() - gbeaconReply.Timestamp
 			log.Println(rid, " -> ", r.Latencies[rid])
 			r.mutex.Unlock()
-			r.Ewma[rid] = 0.99*r.Ewma[rid] + 0.01*float64(rdtsc.Cputicks()-gbeaconReply.Timestamp)
+			r.Ewma[rid] = 0.99*r.Ewma[rid] + 0.01*float64(time.Now().UnixNano()-gbeaconReply.Timestamp)
 			break
 
 		default:
@@ -404,7 +403,7 @@ func (r *Replica) SendBeacon(peerId int32) {
 		return
 	}
 	w.WriteByte(genericsmrproto.GENERIC_SMR_BEACON)
-	beacon := &genericsmrproto.Beacon{rdtsc.Cputicks()}
+	beacon := &genericsmrproto.Beacon{Timestamp: time.Now().UnixNano()}
 	beacon.Marshal(w)
 	w.Flush()
 	log.Println("send beacon ", beacon.Timestamp, " to ", peerId)
