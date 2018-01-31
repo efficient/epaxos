@@ -268,7 +268,7 @@ func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
 			if err = gbeaconReply.Unmarshal(reader); err != nil {
 				break
 			}
-			log.Println("receive beacon reply from ",rid)
+			dlog.Println("receive beacon reply from ",rid)
 			//TODO: UPDATE STUFF
 			r.mutex.Lock()
 			r.Latencies[rid] = rdtsc.Cputicks()-gbeaconReply.Timestamp
@@ -484,5 +484,7 @@ func (r *Replica) UpdateClosestQuorum() {
 	r.mutex.Unlock()
 
 	r.UpdatePreferredPeerOrder(quorum)
+
+	log.Println("Closest quorum: ", r.PreferredPeerOrder)
 
 }
