@@ -86,7 +86,7 @@ fi;
 if [ "${TYPE}" == "client" ];
 then
     args="-maddr ${MADDR} -mport ${MPORT} ${CLIENT_EXTRA_ARGS}"; 
-    echo "client mode: ${args}"
+    echo "client mode: ${args}" > all_logs
 
     mkdir -p logs/
 

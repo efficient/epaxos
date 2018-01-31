@@ -238,7 +238,7 @@ func (b *Parameters) waitReplies(submitter int) (state.Value,error) {
 		if rep.OK == TRUE {
 			ret = rep.Value
 		} else {
-			log.Println("Failed to receive a response")
+			log.Println("Failed to receive a response ", err)
 			if !b.HasFailed {
 				b.HasFailed = true
 			} else {

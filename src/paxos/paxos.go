@@ -235,7 +235,7 @@ func (r *Replica) run() {
 
 		case propose := <-onOffProposeChan:
 			//got a Propose from a client
-			dlog.Printf("Proposal with op %d\n", propose.Command)
+			dlog.Printf("Proposal " + propose.Command.String())
 			r.handlePropose(propose)
 			//deactivate the new proposals channel to prioritize the handling of protocol messages
 			//onOffProposeChan = nil
