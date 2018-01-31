@@ -267,11 +267,10 @@ func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
 			if err = gbeaconReply.Unmarshal(reader); err != nil {
 				break
 			}
-			log.Println("receive beacon ", gbeaconReply.Timestamp, " reply from ",rid)
+			dlog.Println("receive beacon ", gbeaconReply.Timestamp, " reply from ",rid)
 			//TODO: UPDATE STUFF
 			r.mutex.Lock()
 			r.Latencies[rid] += time.Now().UnixNano() - gbeaconReply.Timestamp
-			log.Println(rid, " -> ", r.Latencies[rid])
 			r.mutex.Unlock()
 			r.Ewma[rid] = 0.99*r.Ewma[rid] + 0.01*float64(time.Now().UnixNano()-gbeaconReply.Timestamp)
 			break
@@ -406,7 +405,7 @@ func (r *Replica) SendBeacon(peerId int32) {
 	beacon := &genericsmrproto.Beacon{Timestamp: time.Now().UnixNano()}
 	beacon.Marshal(w)
 	w.Flush()
-	log.Println("send beacon ", beacon.Timestamp, " to ", peerId)
+	dlog.Println("send beacon ", beacon.Timestamp, " to ", peerId)
 	r.mutex.Unlock()
 }
 
@@ -456,13 +455,15 @@ func (r *Replica) UpdatePreferredPeerOrder(quorum []int32) {
 
 func (r *Replica) UpdateClosestQuorum() {
 
-	for i := 0; i < r.N; i++ {
-		if i == int(r.Id) {
+	npings := 10
+
+	for i := int32(0); i < int32(r.N); i++ {
+		if i == r.Id {
 			continue
 		}
 		if r.Alive[i] {
-			for j := 0; j < 10; j++ {
-				r.SendBeacon(int32(i))
+			for j := 0; j < npings; j++ {
+				r.SendBeacon(i)
 			}
 		}
 	}
@@ -472,9 +473,9 @@ func (r *Replica) UpdateClosestQuorum() {
 	quorum := make([]int32, r.N)
 
 	r.mutex.Lock()
-	for i := 0; i < r.N; i++ {
+	for i := int32(0); i < int32(r.N); i++ {
 		pos := 0
-		for j := 0; j < r.N; j++ {
+		for j := int32(0); j < int32(r.N); j++ {
 			if (r.Latencies[j] < r.Latencies[i]) || ((r.Latencies[j] == r.Latencies[i]) && (j < i)) {
 				pos++
 			}
@@ -485,6 +486,10 @@ func (r *Replica) UpdateClosestQuorum() {
 
 	r.UpdatePreferredPeerOrder(quorum)
 
-	log.Println("Closest quorum: ", r.PreferredPeerOrder)
+	for i := 0; i < r.N-1; i++ {
+		node := quorum[i]
+		lat := float64(r.Latencies[node]) / float64(npings* 1000000)
+		log.Println(node, " -> ", lat , "ms")
+	}
 
 }
