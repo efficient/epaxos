@@ -14,7 +14,6 @@ import (
 	"state"
 	"sync"
 	"time"
-	"math/rand"
 )
 
 const MAX_INSTANCE = 2*1024*1024
@@ -276,14 +275,19 @@ func (r *Replica) run() {
 
 	r.UpdateClosestQuorum()
 
+
+	if r.Exec {
+		go r.executeCommands()
+	}
+
 	slowClockChan = make(chan bool, 1)
 	fastClockChan = make(chan bool, 1)
 	go r.slowClock()
 
 	//Enabled when batching for 5ms
- 	//if MAX_BATCH > 100 {
-	//	go r.fastClock()
-	//}
+	if MAX_BATCH > 100 {
+		go r.fastClock()
+	}
 
 	if r.Beacon {
 		go r.stopAdapting()
@@ -291,25 +295,25 @@ func (r *Replica) run() {
 
 	onOffProposeChan := r.ProposeChan
 
-	problemInstance := make([]int32, r.N)
-	timeout := make([]int64, r.N)
-	for q := 0; q < r.N; q++ {
-		problemInstance[q] = -1
-		timeout[q] = 0
-	}
-
-	rand.Seed(time.Now().UnixNano())
-
 	go r.WaitForClientConnections()
 
 	for !r.Shutdown {
 
 		select {
 
-		//case <-fastClockChan:
-		//	//activate new proposals channel
-		//	onOffProposeChan = r.ProposeChan
-		//	break
+		case propose := <-onOffProposeChan:
+			//got a Propose from a client
+			dlog.Printf("Proposal with op %d\n", propose.Command.Op)
+			r.handlePropose(propose)
+			//deactivate new proposals channel to prioritize the handling of other protocol messages,
+			//and to allow commands to accumulate for batching
+			onOffProposeChan = nil
+			break
+
+		case <-fastClockChan:
+			//activate new proposals channel
+			onOffProposeChan = r.ProposeChan
+			break
 
 		case prepareS := <-r.prepareChan:
 			prepare := prepareS.(*epaxosproto.Prepare)
@@ -385,7 +389,6 @@ func (r *Replica) run() {
 			break
 
 		case <-slowClockChan:
-			dlog.Println("Slow clock")
 			if r.Beacon {
 				log.Printf("weird %d; conflicted %d; slow %d; happy %d\n", weird, conflicted, slow, happy)
 				weird, conflicted, slow, happy = 0, 0, 0, 0
@@ -400,50 +403,7 @@ func (r *Replica) run() {
 
 		case iid := <-r.instancesToRecover:
 			r.startRecoveryForInstance(iid.replica, iid.instance)
-			break
-
-		case propose := <-onOffProposeChan:
-			//got a Propose from a client
-			dlog.Println("Proposal with op "+propose.Command.String())
-			r.handlePropose(propose)
-			//deactivate new proposals channel to prioritize the handling of other protocol messages,
-			//and to allow commands to accumulate for batching
-			// onOffProposeChan = nil
-			break
-
 		}
-
-		if r.Exec {
-			now:=time.Now().UnixNano()
-			for q := 0; q < r.N; q++ {
-				inst := int32(0)
-				for inst = r.ExecedUpTo[q] + 1; inst < r.crtInstance[q]; inst++ {
-					if r.InstanceSpace[q][inst] != nil && r.InstanceSpace[q][inst].Status == epaxosproto.EXECUTED {
-						if inst == r.ExecedUpTo[q]+1 {
-							r.ExecedUpTo[q] = inst
-						}
-						continue
-					}
-					if r.InstanceSpace[q][inst] == nil || r.InstanceSpace[q][inst].Status != epaxosproto.COMMITTED || !r.exec.executeCommand(int32(q), inst) {
-						if inst == problemInstance[q] {
-							if now > timeout[q] {
-								r.instancesToRecover <- &instanceId{int32(q), inst}
-								timeout[q] = now + COMMIT_GRACE_PERIOD
-							}
-						} else {
-							dlog.Println("Problem at instance %d.%d",q,inst)
-							problemInstance[q] = inst
-							timeout[q] = now + COMMIT_GRACE_PERIOD
-						}
-						break // stop at the first problematic instance
-					}
-					if inst == r.ExecedUpTo[q]+1 {
-						r.ExecedUpTo[q] = inst
-					}
-				}
-			}
-		}
-
 	}
 }
 
