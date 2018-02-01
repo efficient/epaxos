@@ -455,7 +455,7 @@ func (r *Replica) UpdatePreferredPeerOrder(quorum []int32) {
 
 func (r *Replica) UpdateClosestQuorum() {
 
-	npings := 10
+	npings := 20
 
 	for j := 0; j < npings; j++ {
 		for i := int32(0); i < int32(r.N); i++ {
@@ -466,7 +466,7 @@ func (r *Replica) UpdateClosestQuorum() {
 				r.SendBeacon(i)
 			}
 		}
-		time.Sleep(1 * time.Second)
+		time.Sleep(500 * time.Millisecond)
 	}
 
 	quorum := make([]int32, r.N)
