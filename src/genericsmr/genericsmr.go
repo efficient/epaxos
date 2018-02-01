@@ -69,7 +69,7 @@ type Replica struct {
 	Ewma []float64
 	Latencies []int64
 
-	mutex sync.Mutex
+	Mutex sync.Mutex
 }
 
 func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bool, dreply bool) *Replica {
@@ -269,9 +269,9 @@ func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
 			}
 			dlog.Println("receive beacon ", gbeaconReply.Timestamp, " reply from ",rid)
 			//TODO: UPDATE STUFF
-			r.mutex.Lock()
+			r.Mutex.Lock()
 			r.Latencies[rid] += time.Now().UnixNano() - gbeaconReply.Timestamp
-			r.mutex.Unlock()
+			r.Mutex.Unlock()
 			r.Ewma[rid] = 0.99*r.Ewma[rid] + 0.01*float64(time.Now().UnixNano()-gbeaconReply.Timestamp)
 			break
 
@@ -295,9 +295,9 @@ func (r *Replica) clientListener(conn net.Conn) {
 	var msgType byte //:= make([]byte, 1)
 	var err error
 
-	r.mutex.Lock()
+	r.Mutex.Lock()
 	log.Println("Client up ", conn.RemoteAddr(),"(",r.LRead,")")
-	r.mutex.Unlock()
+	r.Mutex.Unlock()
 
 	for !r.Shutdown && err == nil {
 
@@ -395,7 +395,7 @@ func (r *Replica) ReplyProposeTS(reply *genericsmrproto.ProposeReplyTS, w *bufio
 }
 
 func (r *Replica) SendBeacon(peerId int32) {
-	r.mutex.Lock()
+	r.Mutex.Lock()
 	w := r.PeerWriters[peerId]
 	if w==nil{
 		log.Printf("Connection to %d lost!\n", peerId)
@@ -406,12 +406,12 @@ func (r *Replica) SendBeacon(peerId int32) {
 	beacon.Marshal(w)
 	w.Flush()
 	dlog.Println("send beacon ", beacon.Timestamp, " to ", peerId)
-	r.mutex.Unlock()
+	r.Mutex.Unlock()
 }
 
 func (r *Replica) ReplyBeacon(beacon *Beacon) {
 	dlog.Println("replying beacon to ",beacon.Rid)
-	r.mutex.Lock()
+	r.Mutex.Lock()
 	w := r.PeerWriters[beacon.Rid]
 	if w==nil{
 		log.Printf("Connection to %d lost!\n", beacon.Rid)
@@ -421,7 +421,7 @@ func (r *Replica) ReplyBeacon(beacon *Beacon) {
 	rb := &genericsmrproto.BeaconReply{beacon.Timestamp}
 	rb.Marshal(w)
 	w.Flush()
-	r.mutex.Unlock()
+	r.Mutex.Unlock()
 }
 
 // updates the preferred order in which to communicate with peers according to a preferred quorum
@@ -471,7 +471,7 @@ func (r *Replica) UpdateClosestQuorum() {
 
 	quorum := make([]int32, r.N)
 
-	r.mutex.Lock()
+	r.Mutex.Lock()
 	for i := int32(0); i < int32(r.N); i++ {
 		pos := 0
 		for j := int32(0); j < int32(r.N); j++ {
@@ -481,7 +481,7 @@ func (r *Replica) UpdateClosestQuorum() {
 		}
 		quorum[pos] = int32(i)
 	}
-	r.mutex.Unlock()
+	r.Mutex.Unlock()
 
 	r.UpdatePreferredPeerOrder(quorum)
 
