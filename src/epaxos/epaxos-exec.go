@@ -124,7 +124,7 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 		sort.Sort(nodeArray(list))
 		for _, w := range list {
 			for idx := 0; idx < len(w.Cmds); idx++ {
-				dlog.Printf("Executing "+w.Cmds[idx].String()+" (%d,%d)[%d], deps=%d",w.Coordinator,w.Seq,idx,w.Deps)
+				dlog.Printf("Executing "+w.Cmds[idx].String()+" (%d,%d)[%d], deps=%d, scc_size=%d",w.Coordinator,w.Seq,idx,w.Deps,len(list))
 				if e.r.Dreply && w.lb != nil && w.lb.clientProposals != nil {
 					val := w.Cmds[idx].Execute(e.r.State)
 
