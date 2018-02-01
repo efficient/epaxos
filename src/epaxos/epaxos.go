@@ -275,7 +275,6 @@ func (r *Replica) run() {
 
 	r.UpdateClosestQuorum()
 
-
 	if r.Exec {
 		go r.executeCommands()
 	}

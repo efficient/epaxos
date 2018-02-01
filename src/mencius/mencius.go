@@ -176,13 +176,15 @@ var lastSeenInstance int32
 func (r *Replica) run() {
 	r.ConnectToPeers()
 
-	go r.WaitForClientConnections()
+	r.UpdateClosestQuorum()
 
 	if r.Exec {
 		go r.executeCommands()
 	}
 
 	go r.clock()
+
+	go r.WaitForClientConnections()
 
 	for !r.Shutdown {
 

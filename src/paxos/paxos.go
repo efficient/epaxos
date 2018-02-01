@@ -173,8 +173,6 @@ func (r *Replica) run() {
 		log.Println("I am the leader")
 	}
 
-	go r.WaitForClientConnections()
-
 	if r.Exec {
 		go r.executeCommands()
 	}
@@ -182,6 +180,8 @@ func (r *Replica) run() {
 	clockChan = make(chan bool, 1)
 	go r.clock()
 	onOffProposeChan := r.ProposeChan
+
+	go r.WaitForClientConnections()
 
 	for !r.Shutdown {
 
