@@ -20,31 +20,44 @@ import (
 const TRUE = uint8(1)
 
 type Parameters struct {
+	masterAddr     string
+	masterPort     int
 	verbose        bool
-	HasFailed      bool
-	ClosestReplica int
+	localReads     bool
+	closestReplica int
 	Leader         int
-	IsLeaderless   bool
-	IsFast         bool
-	N              int
-	ReplicaList    []string
+	leaderless     bool
+	isFast         bool
+	n              int
+	replicaLists   []string
 	servers        []net.Conn
 	readers        []*bufio.Reader
 	writers        []*bufio.Writer
 	id             int32
-	done           chan state.Value // FIXME unused
+	retries        int32
 }
 
-func NewParameters() *Parameters{ return &Parameters{ false, false,0,0, false,false,0,nil, nil,nil,nil,0, make(chan state.Value, 1)} }
+func NewParameters(masterAddr string, masterPort int, verbose bool, leaderless bool, fast bool, localReads bool) *Parameters{
+	return &Parameters{
+		masterAddr,
+		masterPort,
+		verbose,
+		localReads,
+		0,
+		0,
+		leaderless,
+		fast,
+		0,
+		nil,
+		nil,
+		nil,
+		nil,
+		0,
+		5}}
 
-func (b *Parameters) Connect(masterAddr string, masterPort int, verbose bool, leaderless bool, fast bool) {
+func (b *Parameters) Connect() {
 
-	b.verbose = verbose
-	b.IsLeaderless = leaderless
-	b.IsFast = fast
-	b.id = 0
-
-	master, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", masterAddr, masterPort))
+	master, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", b.masterAddr, b.masterPort))
 	if err != nil {
 		log.Fatalf("Error connecting to master\n")
 	}
@@ -62,9 +75,9 @@ func (b *Parameters) Connect(masterAddr string, masterPort int, verbose bool, le
 	}
 
 	minLatency := math.MaxFloat64
-	b.ReplicaList = rlReply.ReplicaList
-	for i := 0; i < len(b.ReplicaList); i++ {
-		addr := strings.Split(string(b.ReplicaList[i]), ":")[0]
+	b.replicaLists = rlReply.ReplicaList
+	for i := 0; i < len(b.replicaLists); i++ {
+		addr := strings.Split(string(b.replicaLists[i]), ":")[0]
 		if addr == "" {
 			addr = "127.0.0.1"
 		}
@@ -73,26 +86,26 @@ func (b *Parameters) Connect(masterAddr string, masterPort int, verbose bool, le
 			latency, _ := strconv.ParseFloat(strings.Split(string(out), "/")[4], 64)
 			log.Printf("%v -> %v", i, latency)
 			if minLatency > latency {
-				b.ClosestReplica = i
+				b.closestReplica = i
 				minLatency = latency
 			}
 		} else {
-			log.Fatal("cannot connect to " + b.ReplicaList[i])
+			log.Fatal("cannot connect to " + b.replicaLists[i])
 		}
 	}
 
-	log.Printf("node list %v, closest = (%v,%vms)",b.ReplicaList, b.ClosestReplica, minLatency)
+	log.Printf("node list %v, closest = (%v,%vms)",b.replicaLists, b.closestReplica, minLatency)
 
-	b.N = len(b.ReplicaList)
+	b.n = len(b.replicaLists)
 
-	b.servers = make([]net.Conn, b.N)
-	b.readers = make([]*bufio.Reader, b.N)
-	b.writers = make([]*bufio.Writer, b.N)
+	b.servers = make([]net.Conn, b.n)
+	b.readers = make([]*bufio.Reader, b.n)
+	b.writers = make([]*bufio.Writer, b.n)
 
 	var toConnect []int
-	toConnect=append(toConnect,b.ClosestReplica)
+	toConnect=append(toConnect,b.closestReplica)
 
-	if leaderless == false {
+	if b.leaderless == false {
 		reply := new(masterproto.GetLeaderReply)
 		if err = master.Call("Master.GetLeader", new(masterproto.GetLeaderArgs), reply); err != nil {
 			log.Fatalf("Error making the GetLeader RPC\n")
@@ -103,10 +116,10 @@ func (b *Parameters) Connect(masterAddr string, masterPort int, verbose bool, le
 	}
 
 	for _,i := range toConnect {
-		log.Println("Connection to ", i, " -> ",b.ReplicaList[i])
-		b.servers[i], err = net.DialTimeout("tcp", b.ReplicaList[i], 10*time.Second)
+		log.Println("Connection to ", i, " -> ",b.replicaLists[i])
+		b.servers[i], err = net.DialTimeout("tcp", b.replicaLists[i], 10*time.Second)
 		if err != nil {
-			log.Fatal("Connection error with ", b.ReplicaList[i])
+			log.Fatal("Connection error with ", b.replicaLists[i])
 		} else {
 			b.readers[i] = bufio.NewReader(b.servers[i])
 			b.writers[i] = bufio.NewWriter(b.servers[i])
@@ -126,6 +139,7 @@ func (b *Parameters) Disconnect(){
 	log.Printf("Disconnected")
 }
 
+// not idempotent in case of a failure
 func (b *Parameters) Write(key int64, value []byte) {
 	b.id++
 	args := genericsmrproto.Propose{b.id, state.Command{state.PUT, 0, state.NIL()}, 0}
@@ -171,13 +185,8 @@ func (b *Parameters) Scan(key int64) []byte{
 
 func (b *Parameters) execute(args genericsmrproto.Propose) []byte{
 
-	if b.IsFast {
+	if b.isFast {
 		log.Fatal("NYI")
-	}
-
-	submitter := b.ClosestReplica
-	if (!b.IsLeaderless && args.Command.Op == state.PUT )|| b.HasFailed {
-		submitter = b.Leader
 	}
 
 	err:=errors.New("")
@@ -185,13 +194,18 @@ func (b *Parameters) execute(args genericsmrproto.Propose) []byte{
 
 	for err!=nil {
 
-		if !b.IsFast {
+		submitter := b.Leader
+		if b.leaderless || (args.Command.Op == state.GET && b.localReads) {
+			submitter = b.closestReplica
+		}
+
+		if !b.isFast {
 			b.writers[submitter].WriteByte(genericsmrproto.PROPOSE)
 			args.Marshal(b.writers[submitter])
 			b.writers[submitter].Flush()
 		} else {
 			//send to everyone
-			for rep := 0; rep < b.N; rep++ {
+			for rep := 0; rep < b.n; rep++ {
 				b.writers[rep].WriteByte(genericsmrproto.PROPOSE)
 				args.Marshal(b.writers[rep])
 				b.writers[rep].Flush()
@@ -203,6 +217,17 @@ func (b *Parameters) execute(args genericsmrproto.Propose) []byte{
 		}
 
 		value, err = b.waitReplies(submitter)
+
+		if err!=nil{
+			if b.retries>0{
+				b.retries--
+				log.Println("Reconnecting: ", err)
+				time.Sleep(5 * time.Second)
+				b.Connect()
+			}else{
+				log.Fatal("Cannot recover: ", err)
+			}
+		}
 
 	}
 
@@ -220,30 +245,12 @@ func (b *Parameters) waitReplies(submitter int) (state.Value,error) {
 	// FIXME handle b.Fast properly
 	rep := new(genericsmrproto.ProposeReplyTS)
 	if err = rep.Unmarshal(b.readers[submitter]); err != nil {
-		log.Println("Error when reading:", err)
-		log.Println("Reconnecting ...")
-		if b.servers[submitter]!=nil{ b.servers[submitter].Close()}
-		b.servers[submitter], err = net.DialTimeout("tcp", b.ReplicaList[submitter], 10*time.Second)
-		if err != nil {
-			if !b.HasFailed {
-				b.HasFailed = true
-			} else {
-				log.Fatal("Cannot recover, failed twice")
-			}
-		}else {
-			b.readers[submitter] = bufio.NewReader(b.servers[submitter])
-			b.writers[submitter] = bufio.NewWriter(b.servers[submitter])
-		}
+		log.Println("Error when unmarshalling:", err)
 	} else {
 		if rep.OK == TRUE {
 			ret = rep.Value
 		} else {
-			log.Println("Failed to receive a response ", err)
-			if !b.HasFailed {
-				b.HasFailed = true
-			} else {
-				log.Fatal("cannot recover")
-			}
+			log.Fatal("Fail to receive a response!")
 		}
 	}
 

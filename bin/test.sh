@@ -2,9 +2,9 @@
 
 LOGS=logs
 
-NSERVERS=5
-NCLIENTS=30
-CMDS=10000
+NSERVERS=3
+NCLIENTS=10
+CMDS=5000
 PSIZE=32
 TOTAL_OPS=$(( NCLIENTS * CMDS ))
 
@@ -13,18 +13,21 @@ SERVER=bin/server
 CLIENT=bin/client
 
 DIFF_TOOL=diff
+INJECT_FAILURE=1
 #DIFF_TOOL=merge
 
 master() {
-    ${MASTER} -N ${NSERVERS} &
+    ${MASTER} -N ${NSERVERS} > "${LOGS}/m.txt" 2>&1 &
+    tail -f ${LOGS}/m.txt &
 }
 
 servers() {
     echo ">>>>> Starting servers..."
     for i in $(seq 1 ${NSERVERS}); do
 	port=$(( 7000 + $i ))
-	${SERVER} -e\
-		  -port ${port} > "${LOGS}/s_$i.txt" 2>&1 &
+	${SERVER}\
+	    -lread \
+	    -port ${port} > "${LOGS}/s_$i.txt" 2>&1 &
     done
 
     up=-1
@@ -39,17 +42,27 @@ clients() {
     echo ">>>>> Starting clients..."
     for i in $(seq 1 $NCLIENTS); do
 	${CLIENT} -v \
-		  -e \
 		  -q ${CMDS} \
 		  -w 100 \
 		  -c 100 \
+		  -l \
 		  -psize ${PSIZE} > "${LOGS}/c_$i.txt" 2>&1 &
     done
 
     ended=-1
     while [ ${ended} != ${NCLIENTS} ]; do
 	ended=$(cat logs/c_*.txt  | grep "Disconnected" | wc -l)
-	sleep 2
+	sleep 1
+	if [ ${INJECT_FAILURE} == 1 ];
+	then
+	    sleep 10
+	    leader=$(grep "new leader" ${LOGS}/m.txt | awk '{print $7}')
+	    port=$(grep "node ${leader}" ${LOGS}/m.txt | sed -n 's/.*\(:.*\]\).*/\1/p' | sed 's/[]:]//g')
+	    pid=$(ps -ef | grep "bin/server" | grep "${port}" | awk '{print $2}')
+	    echo ">>>>> Injecting failure... (${leader}, ${port}, ${pid})"
+	    kill -9 ${pid}
+	    INJECT_FAILURE=0
+	fi
     done
     echo ">>>>> Client ended!"
 }

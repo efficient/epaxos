@@ -20,6 +20,7 @@ var writes *int = flag.Int("w", 100, "Percentage of updates (writes). ")
 var psize *int = flag.Int("psize", 100, "Payload size for writes.")
 var noLeader *bool = flag.Bool("e", false, "Egalitarian (no leader). ")
 var fast *bool = flag.Bool("f", false, "Fast Paxos: send message directly to all replicas. ")
+var localReads *bool = flag.Bool("l", true, "Execute reads at the closest (local) replica. ")
 var procs *int = flag.Int("p", 2, "GOMAXPROCS. ")
 var conflicts *int = flag.Int("c", 0, "Percentage of conflicts. Defaults to 0%")
 var verbose *bool = flag.Bool("v", false, "verbose mode. ")
@@ -36,8 +37,8 @@ func main() {
 		log.Fatalf("Conflicts percentage must be between 0 and 100.\n")
 	}
 
-	proxy := bindings.NewParameters()
-	proxy.Connect(*masterAddr,*masterPort,*verbose,*noLeader,*fast)
+	proxy := bindings.NewParameters(*masterAddr,*masterPort,*verbose,*noLeader,*fast,*localReads)
+	proxy.Connect()
 
 	if clientId == "" {
 		clientId = uuid.New().String()
