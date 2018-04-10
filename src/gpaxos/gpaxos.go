@@ -286,7 +286,7 @@ func (r *Replica) run() {
 		go r.handleReplicaConnection(rid, peerReader)
 	}
 
-	r.UpdateClosestQuorum()
+	r.ComputeClosestPeers()
 
 	if r.isLeader {
 		log.Println("I am the leader")

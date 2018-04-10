@@ -77,6 +77,9 @@ func (b *Parameters) Connect() {
 	minLatency := math.MaxFloat64
 	b.replicaLists = rlReply.ReplicaList
 	for i := 0; i < len(b.replicaLists); i++ {
+		if !rlReply.AliveList[i]{
+			continue
+		}
 		addr := strings.Split(string(b.replicaLists[i]), ":")[0]
 		if addr == "" {
 			addr = "127.0.0.1"
@@ -221,8 +224,9 @@ func (b *Parameters) execute(args genericsmrproto.Propose) []byte{
 		if err!=nil{
 			if b.retries>0{
 				b.retries--
-				log.Println("Reconnecting: ", err)
-				time.Sleep(5 * time.Second)
+				b.Disconnect()
+				log.Println("Reconnecting ...")
+				time.Sleep(10 * time.Second) // must be inline with the closest quorum re-computation
 				b.Connect()
 			}else{
 				log.Fatal("Cannot recover: ", err)

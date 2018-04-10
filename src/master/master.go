@@ -204,12 +204,12 @@ func (master *Master) GetReplicaList(args *masterproto.GetReplicaListArgs, reply
 	}
 
 	reply.ReplicaList = make([]string, 0)
+	reply.AliveList = make([]bool, 0)
 	for i,node := range master.nodeList {
-		if master.alive[i]{
-			reply.ReplicaList = append(reply.ReplicaList,node)
-		}
+		reply.ReplicaList = append(reply.ReplicaList,node)
+		reply.AliveList = append(reply.AliveList,master.alive[i])
 	}
 
-	log.Printf("alive nodes list %v", reply.ReplicaList)
+	log.Printf("nodes list %v", reply.ReplicaList)
 	return nil
 }

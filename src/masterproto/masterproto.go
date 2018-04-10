@@ -24,5 +24,6 @@ type GetReplicaListArgs struct {
 
 type GetReplicaListReply struct {
 	ReplicaList []string
+	AliveList       []bool
 	Ready       bool
 }

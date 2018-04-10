@@ -141,6 +141,7 @@ func (r *Replica) BeTheLeader(args *genericsmrproto.BeTheLeaderArgs, reply *gene
 	r.Mutex.Lock()
 	r.IsLeader = true
 	log.Println("I am the leader")
+	time.Sleep(5*time.Second) // wait that the connection is lost
 	// TODO recover instances
 	r.Mutex.Unlock()
 	return nil
@@ -171,7 +172,7 @@ func (r *Replica) run() {
 
 	r.ConnectToPeers()
 
-	r.UpdateClosestQuorum()
+	r.ComputeClosestPeers()
 
 	if r.IsLeader {
 		log.Println("I am the leader")
@@ -198,7 +199,7 @@ func (r *Replica) run() {
 
 		case propose := <- onOffProposeChan:
 			//got a Propose from a client
-			dlog.Printf("Proposal with op %d\n", propose.Command.Op)
+			dlog.Printf("Received proposal with type=%d\n", propose.Command.Op)
 			r.handlePropose(propose)
 			//deactivate the new proposals channel to prioritize the handling of protocol messages
 			onOffProposeChan = nil
@@ -251,7 +252,11 @@ func (r *Replica) run() {
 }
 
 func (r *Replica) makeUniqueBallot(ballot int32) int32 {
-	return (ballot << 4) | r.Id
+	ret := (ballot << 4) | r.Id
+	if r.defaultBallot > ret{
+		ret = ret + int32(r.N)
+	}
+	return ret
 }
 
 func (r *Replica) updateCommittedUpTo() {
@@ -259,6 +264,7 @@ func (r *Replica) updateCommittedUpTo() {
 		r.instanceSpace[r.committedUpTo+1].status == COMMITTED {
 		r.committedUpTo++
 	}
+	dlog.Printf("Committed up to %d",r.committedUpTo)
 }
 
 func (r *Replica) bcastPrepare(instance int32, ballot int32, toInfinity bool) {
@@ -346,43 +352,24 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 	pcs.Count = int32(len(command))
 	argsShort := &pcs
 
-	//args := &paxosproto.Commit{r.Id, instance, command}
-
-	n := r.N - 1
-	if r.Thrifty {
-		n = r.N >> 1
-	}
-	q := r.Id
 	sent := 0
-
-	for sent < n {
-		q = (q + 1) % int32(r.N)
-		if q == r.Id {
-			break
-		}
-		if !r.Alive[q] {
+	for q := 0; q < r.N-1; q++ {
+		if !r.Alive[r.PreferredPeerOrder[q]] {
 			continue
 		}
-		sent++
-		r.SendMsg(q, r.commitShortRPC, argsShort)
-	}
-	if r.Thrifty && q != r.Id {
-		for sent < r.N-1 {
-			q = (q + 1) % int32(r.N)
-			if q == r.Id {
-				break
-			}
-			if !r.Alive[q] {
-				continue
-			}
-			sent++
-			r.SendMsg(q, r.commitRPC, args)
+		if sent < (r.N >> 1) {
+			r.SendMsg(r.PreferredPeerOrder[q], r.commitShortRPC, argsShort)
+		}else{
+			r.SendMsg(r.PreferredPeerOrder[q], r.commitRPC, args)
 		}
+		sent++
 	}
+
 }
 
 func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	if !r.IsLeader {
+		dlog.Printf("Not the leader, cannot propose %v\n", propose.CommandId)
 		preply := &genericsmrproto.ProposeReplyTS{FALSE, -1, state.NIL(), 0}
 		r.ReplyProposeTS(preply, propose.Reply)
 		return
@@ -445,12 +432,14 @@ func (r *Replica) handlePrepare(prepare *paxosproto.Prepare) {
 	if inst == nil {
 		ok := TRUE
 		if r.defaultBallot > prepare.Ballot {
+			dlog.Printf("Lower than default! %d < %d",prepare.Ballot, r.defaultBallot)
 			ok = FALSE
 		}
 		preply = &paxosproto.PrepareReply{prepare.Instance, ok, r.defaultBallot, make([]state.Command, 0)}
 	} else {
 		ok := TRUE
 		if prepare.Ballot < inst.ballot {
+			dlog.Printf("Lower than last ballot! %d < %d",prepare.Ballot, inst.ballot)
 			ok = FALSE
 		}
 		preply = &paxosproto.PrepareReply{prepare.Instance, ok, inst.ballot, inst.cmds}
@@ -585,6 +574,8 @@ func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
 				// there is already a competing command for this instance,
 				// so we put the client proposal back in the queue so that
 				// we know to try it in another instance
+				// FIXME
+				dlog.Printf("Re-proposing the command.")
 				for i := 0; i < len(inst.lb.clientProposals); i++ {
 					r.ProposeChan <- inst.lb.clientProposals[i]
 				}
@@ -603,6 +594,7 @@ func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
 			r.bcastAccept(preply.Instance, inst.ballot, inst.cmds)
 		}
 	} else {
+		dlog.Printf("There is another active leader.")
 		// TODO: there is probably another active leader
 		inst.lb.nacks++
 		if preply.Ballot > inst.lb.maxRecvBallot {
@@ -672,6 +664,7 @@ func (r *Replica) executeCommands() {
 			if r.instanceSpace[i].cmds != nil {
 				inst := r.instanceSpace[i]
 				for j := 0; j < len(inst.cmds); j++ {
+					dlog.Printf("Executing "+inst.cmds[j].String())
 					if r.Dreply && inst.lb != nil && inst.lb.clientProposals != nil {
 						val := inst.cmds[j].Execute(r.State)
 						propreply := &genericsmrproto.ProposeReplyTS{

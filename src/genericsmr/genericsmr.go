@@ -14,6 +14,7 @@ import (
 	"time"
 	"sync"
 	"dlog"
+	"math"
 )
 
 const CHAN_BUFFER_SIZE = 200000
@@ -287,6 +288,8 @@ func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
 			}
 		}
 	}
+
+	r.Alive[rid] = false
 }
 
 func (r *Replica) clientListener(conn net.Conn) {
@@ -453,7 +456,7 @@ func (r *Replica) UpdatePreferredPeerOrder(quorum []int32) {
 	r.PreferredPeerOrder = aux
 }
 
-func (r *Replica) UpdateClosestQuorum() {
+func (r *Replica) ComputeClosestPeers() {
 
 	npings := 20
 
@@ -464,6 +467,8 @@ func (r *Replica) UpdateClosestQuorum() {
 			}
 			if r.Alive[i] {
 				r.SendBeacon(i)
+			} else {
+				r.Latencies[i] = math.MaxInt64
 			}
 		}
 		time.Sleep(500 * time.Millisecond)

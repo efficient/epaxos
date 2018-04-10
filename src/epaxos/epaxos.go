@@ -273,7 +273,7 @@ var conflicted, weird, slow, happy int
 func (r *Replica) run() {
 	r.ConnectToPeers()
 
-	r.UpdateClosestQuorum()
+	r.ComputeClosestPeers()
 
 	if r.Exec {
 		go r.executeCommands()
@@ -1344,9 +1344,9 @@ func (r *Replica) handlePrepare(prepare *epaxosproto.Prepare) {
 		if prepare.Ballot < inst.ballot {
 			ok = FALSE
 		} else {
-			inst.ballot = prepare.Ballot  // FIXME not inline w. TLA spec. (prev_ballot is missing)
+			inst.ballot = prepare.Ballot
 		}
-		preply = &epaxosproto.PrepareReply{
+		preply = &epaxosproto.PrepareReply{   // FIXME not inline w. TLA spec. (prev_ballot is missing)
 			r.Id,
 			prepare.Replica,
 			prepare.Instance,

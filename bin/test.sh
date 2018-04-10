@@ -3,8 +3,8 @@
 LOGS=logs
 
 NSERVERS=3
-NCLIENTS=10
-CMDS=5000
+NCLIENTS=30
+CMDS=2000
 PSIZE=32
 TOTAL_OPS=$(( NCLIENTS * CMDS ))
 
@@ -13,8 +13,9 @@ SERVER=bin/server
 CLIENT=bin/client
 
 DIFF_TOOL=diff
-INJECT_FAILURE=1
 #DIFF_TOOL=merge
+
+INJECT_FAILURE=1
 
 master() {
     ${MASTER} -N ${NSERVERS} > "${LOGS}/m.txt" 2>&1 &
@@ -26,7 +27,10 @@ servers() {
     for i in $(seq 1 ${NSERVERS}); do
 	port=$(( 7000 + $i ))
 	${SERVER}\
+	    -e \
 	    -lread \
+	    -exec \
+	    -thrifty \
 	    -port ${port} > "${LOGS}/s_$i.txt" 2>&1 &
     done
 
@@ -46,12 +50,13 @@ clients() {
 		  -w 100 \
 		  -c 100 \
 		  -l \
+		  -e \
 		  -psize ${PSIZE} > "${LOGS}/c_$i.txt" 2>&1 &
     done
 
     ended=-1
     while [ ${ended} != ${NCLIENTS} ]; do
-	ended=$(cat logs/c_*.txt  | grep "Disconnected" | wc -l)
+	ended=$(cat logs/c_*.txt  | grep "Test took" | wc -l)
 	sleep 1
 	if [ ${INJECT_FAILURE} == 1 ];
 	then
@@ -92,7 +97,7 @@ end_exp() {
     case ${DIFF_TOOL} in
 	diff)
 	    for i in $(seq 2 ${NSERVERS}); do
-		diff "${LOGS}/1.ops" "${LOGS}/$i.ops"
+		diff "${LOGS}/1.ops" "${LOGS}/$i.ops" > /dev/null
 	    done
 	    ;;
 	merge)
@@ -112,6 +117,7 @@ end_exp() {
 	    echo "Invalid diff tool!"
 	    exit -1
     esac
+
 }
 
 trap "stop_all; exit 255" SIGINT SIGTERM
@@ -121,3 +127,5 @@ master
 servers
 clients
 end_exp
+
+stop_all

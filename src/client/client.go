@@ -87,8 +87,9 @@ func main() {
 
 	}
 
+	proxy.Disconnect();
+
 	after_total := time.Now()
 	fmt.Printf("Test took %v\n", after_total.Sub(before_total))
 
-	proxy.Disconnect();
 }

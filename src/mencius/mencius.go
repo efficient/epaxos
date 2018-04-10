@@ -176,7 +176,7 @@ var lastSeenInstance int32
 func (r *Replica) run() {
 	r.ConnectToPeers()
 
-	r.UpdateClosestQuorum()
+	r.ComputeClosestPeers()
 
 	if r.Exec {
 		go r.executeCommands()
