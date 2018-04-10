@@ -141,8 +141,7 @@ func (r *Replica) BeTheLeader(args *genericsmrproto.BeTheLeaderArgs, reply *gene
 	r.Mutex.Lock()
 	r.IsLeader = true
 	log.Println("I am the leader")
-	time.Sleep(5*time.Second) // wait that the connection is lost
-	// TODO recover instances
+	time.Sleep(5*time.Second) // wait that the connection is actually lost
 	r.Mutex.Unlock()
 	return nil
 }
