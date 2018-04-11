@@ -171,7 +171,7 @@ func (master *Master) Register(args *masterproto.RegisterArgs, reply *masterprot
 		}
 
 		if leader == index {
-			log.Println("The new leader is ", index)
+			log.Printf("Replica %d is the new leader.", index)
 			master.leader[index] = true
 			reply.IsLeader = true
 		}

@@ -2,9 +2,9 @@
 
 LOGS=logs
 
-NSERVERS=3
+NSERVERS=5
 NCLIENTS=30
-CMDS=2000
+CMDS=30000
 PSIZE=32
 TOTAL_OPS=$(( NCLIENTS * CMDS ))
 
@@ -15,7 +15,7 @@ CLIENT=bin/client
 DIFF_TOOL=diff
 #DIFF_TOOL=merge
 
-INJECT_FAILURE=1
+failure=1
 
 master() {
     ${MASTER} -N ${NSERVERS} > "${LOGS}/m.txt" 2>&1 &
@@ -58,15 +58,15 @@ clients() {
     while [ ${ended} != ${NCLIENTS} ]; do
 	ended=$(cat logs/c_*.txt  | grep "Test took" | wc -l)
 	sleep 1
-	if [ ${INJECT_FAILURE} == 1 ];
+	if (( ${failure} > 0 ));
 	then
-	    sleep 10
-	    leader=$(grep "new leader" ${LOGS}/m.txt | awk '{print $7}')
+	    sleep 20
+	    leader=$(grep "new leader" ${LOGS}/m.txt | tail -n 1 | awk '{print $4}')
 	    port=$(grep "node ${leader}" ${LOGS}/m.txt | sed -n 's/.*\(:.*\]\).*/\1/p' | sed 's/[]:]//g')
 	    pid=$(ps -ef | grep "bin/server" | grep "${port}" | awk '{print $2}')
 	    echo ">>>>> Injecting failure... (${leader}, ${port}, ${pid})"
 	    kill -9 ${pid}
-	    INJECT_FAILURE=0
+	    failure=$((failure - 1))
 	fi
     done
     echo ">>>>> Client ended!"
@@ -76,6 +76,7 @@ stop_all() {
     for p in ${CLIENT} ${SERVER} ${MASTER}; do
 	ps -aux | grep ${p} | awk '{ print $2 }' | xargs kill -9
     done
+    ps -aux | grep "tail -f ${LOGS}/m.txt" | awk '{ print $2 }' | xargs kill -9
 }
 
 start_exp() {

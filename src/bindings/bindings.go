@@ -93,11 +93,11 @@ func (b *Parameters) Connect() {
 				minLatency = latency
 			}
 		} else {
-			log.Fatal("cannot connect to " + b.replicaLists[i])
+			log.Printf("cannot connect to " + b.replicaLists[i])
 		}
 	}
 
-	log.Printf("node list %v, closest = (%v,%vms)",b.replicaLists, b.closestReplica, minLatency)
+	log.Printf("node list %v, closest (alive) = (%v,%vms)",b.replicaLists, b.closestReplica, minLatency)
 
 	b.n = len(b.replicaLists)
 
@@ -222,6 +222,7 @@ func (b *Parameters) execute(args genericsmrproto.Propose) []byte{
 		value, err = b.waitReplies(submitter)
 
 		if err!=nil{
+			log.Println("Error: ", err)
 			if b.retries>0{
 				b.retries--
 				b.Disconnect()
@@ -229,7 +230,7 @@ func (b *Parameters) execute(args genericsmrproto.Propose) []byte{
 				time.Sleep(10 * time.Second) // must be inline with the closest quorum re-computation
 				b.Connect()
 			}else{
-				log.Fatal("Cannot recover: ", err)
+				log.Fatal("Cannot recover.")
 			}
 		}
 
@@ -246,15 +247,12 @@ func (b *Parameters) waitReplies(submitter int) (state.Value,error) {
 	var err error
 	ret := state.NIL()
 
-	// FIXME handle b.Fast properly
 	rep := new(genericsmrproto.ProposeReplyTS)
-	if err = rep.Unmarshal(b.readers[submitter]); err != nil {
-		log.Println("Error when unmarshalling:", err)
-	} else {
+	if err = rep.Unmarshal(b.readers[submitter]); err == nil {
 		if rep.OK == TRUE {
 			ret = rep.Value
 		} else {
-			log.Fatal("Fail to receive a response!")
+			err = errors.New("Failed to receive a response.")
 		}
 	}
 

@@ -345,7 +345,7 @@ func (r *Replica) run() {
 		case commitS := <-r.commitShortChan:
 			commit := commitS.(*epaxosproto.CommitShort)
 			//got a Commit message
-			dlog.Printf("Received Commit %d.%d\n", commit.LeaderId, commit.Instance)
+			dlog.Printf("Received (short) Commit %d.%d\n", commit.LeaderId, commit.Instance)
 			r.handleCommitShort(commit)
 			break
 
@@ -1202,6 +1202,7 @@ func (r *Replica) handleCommit(commit *epaxosproto.Commit) {
 			}
 			inst.lb = nil
 		}
+		inst.Cmds = commit.Command
 		inst.Seq = commit.Seq
 		inst.Deps = commit.Deps
 		inst.Status = epaxosproto.COMMITTED
