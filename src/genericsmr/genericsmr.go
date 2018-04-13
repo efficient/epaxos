@@ -15,6 +15,7 @@ import (
 	"sync"
 	"dlog"
 	"math"
+	"encoding/json"
 )
 
 const CHAN_BUFFER_SIZE = 200000
@@ -71,6 +72,8 @@ type Replica struct {
 	Latencies []int64
 
 	Mutex sync.Mutex
+
+	Stats *genericsmrproto.Stats
 }
 
 func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bool, dreply bool) *Replica {
@@ -99,7 +102,8 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bo
 		genericsmrproto.GENERIC_SMR_BEACON_REPLY + 1,
 		make([]float64, len(peerAddrList)),
 		make([]int64, len(peerAddrList)),
-		sync.Mutex{}}
+		sync.Mutex{},
+		&genericsmrproto.Stats{make(map[string]int)}}
 
 	var err error
 
@@ -343,6 +347,11 @@ func (r *Replica) clientListener(conn net.Conn) {
 			}
 			//r.ProposeAndReadChan <- pr
 			break
+
+		case genericsmrproto.STATS:
+			b,_ := json.Marshal(r.Stats)
+			writer.Write(b)
+			writer.Flush()
 		}
 	}
 

@@ -13,6 +13,7 @@ const (
 	PROPOSE_AND_READ_REPLY
 	GENERIC_SMR_BEACON
 	GENERIC_SMR_BEACON_REPLY
+	STATS
 )
 
 type Propose struct {
@@ -77,3 +78,8 @@ type BeTheLeaderArgs struct {
 
 type BeTheLeaderReply struct {
 }
+
+type Stats struct {
+	M map[string]int `json:"stats"`
+}
+

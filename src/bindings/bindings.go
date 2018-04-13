@@ -186,6 +186,16 @@ func (b *Parameters) Scan(key int64) []byte{
 	return b.execute(args)
 }
 
+func (b *Parameters) Stats() (string){
+	b.writers[b.closestReplica].WriteByte(genericsmrproto.STATS)
+	b.writers[b.closestReplica].Flush()
+	bytes := make([]byte,100)
+	b.readers[b.closestReplica].Read(bytes)
+	return string(bytes)
+}
+
+// internals
+
 func (b *Parameters) execute(args genericsmrproto.Propose) []byte{
 
 	if b.isFast {

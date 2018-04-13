@@ -178,6 +178,8 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bo
 	r.tryPreAcceptRPC = r.RegisterRPC(new(epaxosproto.TryPreAccept), r.tryPreAcceptChan)
 	r.tryPreAcceptReplyRPC = r.RegisterRPC(new(epaxosproto.TryPreAcceptReply), r.tryPreAcceptReplyChan)
 
+	r.Stats.M["weird"], r.Stats.M["conflicted"], r.Stats.M["slow"], r.Stats.M["fast"] = 0, 0, 0, 0
+
 	go r.run()
 
 	return r
@@ -261,8 +263,6 @@ func (r *Replica) stopAdapting() {
 
 	log.Println(r.PreferredPeerOrder)
 }
-
-var conflicted, weird, slow, happy int
 
 /* ============= */
 
@@ -389,8 +389,7 @@ func (r *Replica) run() {
 
 		case <-slowClockChan:
 			if r.Beacon {
-				log.Printf("weird %d; conflicted %d; slow %d; happy %d\n", weird, conflicted, slow, happy)
-				weird, conflicted, slow, happy = 0, 0, 0, 0
+				log.Printf("weird %d; conflicted %d; slow %d; fast %d\n", r.Stats.M["weird"], r.Stats.M["conflicted"], r.Stats.M["slow"], r.Stats.M["fast"])
 				for q := int32(0); q < int32(r.N); q++ {
 					if q == r.Id {
 						continue
@@ -1002,7 +1001,7 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 	if (r.N <= 3 && !r.Thrifty) || inst.lb.preAcceptOKs > 1 {
 		inst.lb.allEqual = inst.lb.allEqual && equal
 		if !equal {
-			conflicted++
+			r.Stats.M["conflicted"]++
 		}
 	}
 
@@ -1022,7 +1021,7 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 
 	//can we commit on the fast path?
 	if inst.lb.preAcceptOKs >= (r.fastQuorumSize() - 1) && inst.lb.allEqual && allCommitted && isInitialBallot(inst.ballot) {
-		happy++
+		r.Stats.M["fast"]++
 		dlog.Printf("Fast path %d.%d, w. deps %d\n", pareply.Replica, pareply.Instance, pareply.Deps)
 		r.InstanceSpace[pareply.Replica][pareply.Instance].Status = epaxosproto.COMMITTED
 		r.updateCommitted(pareply.Replica)
@@ -1045,10 +1044,10 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 		r.bcastCommit(pareply.Replica, pareply.Instance, inst.Cmds, inst.Seq, inst.Deps)
 	} else if inst.lb.preAcceptOKs >= r.N/2 {
 		if !allCommitted {
-			weird++
+			r.Stats.M["weird"]++
 		}
 		dlog.Printf("Slow path %d.%d\n", pareply.Replica, pareply.Instance)
-		slow++
+		r.Stats.M["slow"]++
 		inst.Status = epaxosproto.ACCEPTED
 		r.bcastAccept(pareply.Replica, pareply.Instance, inst.ballot, int32(len(inst.Cmds)), inst.Seq, inst.Deps)
 	} else{
