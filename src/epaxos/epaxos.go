@@ -86,6 +86,7 @@ type Instance struct {
 	lb             *LeaderBookkeeping
 	Index, Lowlink int
 	bfilter        *bloomfilter.Bloomfilter
+	proposeTime    int64
 }
 
 type instanceId struct {
@@ -178,7 +179,7 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bo
 	r.tryPreAcceptRPC = r.RegisterRPC(new(epaxosproto.TryPreAccept), r.tryPreAcceptChan)
 	r.tryPreAcceptReplyRPC = r.RegisterRPC(new(epaxosproto.TryPreAcceptReply), r.tryPreAcceptReplyChan)
 
-	r.Stats.M["weird"], r.Stats.M["conflicted"], r.Stats.M["slow"], r.Stats.M["fast"] = 0, 0, 0, 0
+	r.Stats.M["weird"], r.Stats.M["conflicted"], r.Stats.M["slow"], r.Stats.M["fast"], r.Stats.M["totalCommitTime"] = 0, 0, 0, 0, 0
 
 	go r.run()
 
@@ -820,7 +821,8 @@ func (r *Replica) startPhase1(replica int32, instance int32, ballot int32, propo
 		seq,
 		deps,
 		&LeaderBookkeeping{proposals, 0, 0, true, 0, 0, 0, deps, comDeps, nil, false, false, nil, 0}, 0, 0,
-		nil}
+		nil,
+	time.Now().UnixNano()}
 
 	r.updateConflicts(cmds, r.Id, instance, seq)
 
@@ -859,7 +861,8 @@ func (r *Replica) startPhase1(replica int32, instance int32, ballot int32, propo
 			&LeaderBookkeeping{nil, 0, 0, true, 0, 0, 0, deps, nil, nil, false, false, nil, 0},
 			0,
 			0,
-			nil}
+			nil,
+		0}
 
 		r.latestCPReplica = r.Id
 		r.latestCPInstance = instance
@@ -935,7 +938,8 @@ func (r *Replica) handlePreAccept(preAccept *epaxosproto.PreAccept) {
 			seq,
 			deps,
 			nil, 0, 0,
-			nil}
+			nil,
+		0}
 	}
 
 	r.updateConflicts(preAccept.Command, preAccept.Replica, preAccept.Instance, preAccept.Seq)
@@ -1042,6 +1046,7 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 		r.sync() //is this necessary here?
 
 		r.bcastCommit(pareply.Replica, pareply.Instance, inst.Cmds, inst.Seq, inst.Deps)
+		r.Stats.M["totalCommitTime"]+=int(time.Now().UnixNano()-inst.proposeTime)
 	} else if inst.lb.preAcceptOKs >= r.N/2 {
 		if !allCommitted {
 			r.Stats.M["weird"]++
@@ -1096,7 +1101,7 @@ func (r *Replica) handleAccept(accept *epaxosproto.Accept) {
 			epaxosproto.ACCEPTED,
 			accept.Seq,
 			accept.Deps,
-			nil, 0, 0, nil}
+			nil, 0, 0, nil, 0}
 
 		if accept.Count == 0 {
 			//checkpoint
@@ -1169,6 +1174,7 @@ func (r *Replica) handleAcceptReply(areply *epaxosproto.AcceptReply) {
 		r.sync() //is this necessary here?
 
 		r.bcastCommit(areply.Replica, areply.Instance, inst.Cmds, inst.Seq, inst.Deps)
+		r.Stats.M["totalCommitTime"]+=int(time.Now().UnixNano()-inst.proposeTime)
 	}else{
 		dlog.Println("Not enough")
 	}
@@ -1216,7 +1222,7 @@ func (r *Replica) handleCommit(commit *epaxosproto.Commit) {
 			nil,
 			0,
 			0,
-			nil}
+			nil, 0}
 		r.updateConflicts(commit.Command, commit.Replica, commit.Instance, commit.Seq)
 
 		if len(commit.Command) == 0 {
@@ -1261,7 +1267,7 @@ func (r *Replica) handleCommitShort(commit *epaxosproto.CommitShort) {
 			epaxosproto.COMMITTED,
 			commit.Seq,
 			commit.Deps,
-			nil, 0, 0, nil}
+			nil, 0, 0, nil, 0}
 
 		if commit.Count == 0 {
 			//checkpoint
@@ -1291,7 +1297,7 @@ func (r *Replica) startRecoveryForInstance(replica int32, instance int32) {
 
 	if r.InstanceSpace[replica][instance] == nil {
 		dlog.Println("Creating instance")
-		r.InstanceSpace[replica][instance] = &Instance{replica,nil, 0, epaxosproto.NONE, 0, nildeps, nil, 0, 0, nil}
+		r.InstanceSpace[replica][instance] = &Instance{replica,nil, 0, epaxosproto.NONE, 0, nildeps, nil, 0, 0, nil, 0}
 	}
 
 	inst := r.InstanceSpace[replica][instance]
@@ -1327,7 +1333,7 @@ func (r *Replica) handlePrepare(prepare *epaxosproto.Prepare) {
 			epaxosproto.NONE,
 			0,
 			nildeps,
-			nil, 0, 0, nil}
+			nil, 0, 0, nil, 0}
 		preply = &epaxosproto.PrepareReply{
 			r.Id,
 			prepare.Replica,
@@ -1389,8 +1395,9 @@ func (r *Replica) handlePrepareReply(preply *epaxosproto.PrepareReply) {
 			epaxosproto.COMMITTED,
 			preply.Seq,
 			preply.Deps,
-			nil, 0, 0, nil}
+			nil, 0, 0, nil, 0}
 		r.bcastCommit(preply.Replica, preply.Instance, inst.Cmds, preply.Seq, preply.Deps)
+		r.Stats.M["totalCommitTime"]+=int(time.Now().UnixNano()-inst.proposeTime)
 		//TODO: check if we should send notifications to clients
 		dlog.Println("Already committed")
 		return
@@ -1489,7 +1496,7 @@ func (r *Replica) handlePrepareReply(preply *epaxosproto.PrepareReply) {
 			epaxosproto.ACCEPTED,
 			0,
 			noop_deps,
-			inst.lb, 0, 0, nil}
+			inst.lb, 0, 0, nil, 0}
 		dlog.Println("Bcasting accept")
 		r.bcastAccept(preply.Replica, preply.Instance, inst.ballot, 0, 0, noop_deps)
 	}
@@ -1540,7 +1547,7 @@ func (r *Replica) handleTryPreAccept(tpa *epaxosproto.TryPreAccept) {
 				tpa.Seq,
 				tpa.Deps,
 				nil, 0, 0,
-				nil}
+				nil, 0}
 		}
 		r.replyTryPreAccept(tpa.LeaderId, &epaxosproto.TryPreAcceptReply{r.Id, tpa.Replica, tpa.Instance, TRUE, inst.ballot, 0, 0, 0})
 	}
