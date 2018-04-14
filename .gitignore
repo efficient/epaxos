@@ -6,3 +6,5 @@ bin/server
 bin/client
 src/github.com/
 *.swp
+*.DS_Store
+epaxos-version
