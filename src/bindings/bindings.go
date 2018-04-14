@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"time"
 	"errors"
+	"bytes"
 )
 
 const TRUE = uint8(1)
@@ -189,9 +190,9 @@ func (b *Parameters) Scan(key int64) []byte{
 func (b *Parameters) Stats() (string){
 	b.writers[b.closestReplica].WriteByte(genericsmrproto.STATS)
 	b.writers[b.closestReplica].Flush()
-	bytes := make([]byte,100)
-	b.readers[b.closestReplica].Read(bytes)
-	return string(bytes)
+	arr := make([]byte,100)
+	b.readers[b.closestReplica].Read(arr)
+	return string(bytes.Trim(arr, "\x00"))
 }
 
 // internals
