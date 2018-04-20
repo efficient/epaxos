@@ -84,8 +84,8 @@ func main() {
 		after := time.Now()
 
 		duration := after.Sub(before)
-		fmt.Printf("latency %d\n", duration.Nanoseconds())
-		fmt.Printf("chain %d-1\n", after.Nanosecond())
+		fmt.Printf("latency %d\n", to_ms(duration.Nanoseconds()))
+		fmt.Printf("chain %d-1\n", to_ms(after.UnixNano()))
 	}
 
 	fmt.Printf(proxy.Stats() + "\n")
@@ -94,4 +94,9 @@ func main() {
 
 	after_total := time.Now()
 	fmt.Printf("Test took %v\n", after_total.Sub(before_total))
+}
+
+// convert nanosecond to millisecond
+func to_ms(nano int64) int64 {
+  return nano / 1000000
 }
