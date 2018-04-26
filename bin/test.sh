@@ -4,7 +4,7 @@ LOGS=logs
 
 NSERVERS=3
 NCLIENTS=10
-CMDS=1
+CMDS=10000
 PSIZE=32
 TOTAL_OPS=$(( NCLIENTS * CMDS ))
 
@@ -27,7 +27,6 @@ servers() {
     for i in $(seq 1 ${NSERVERS}); do
 	port=$(( 7000 + $i ))
 	${SERVER}\
-	    -e \
 	    -lread \
 	    -exec \
 	    -thrifty \

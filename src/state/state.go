@@ -2,8 +2,7 @@ package state
 
 import (
 	"sync"
-	//"code.google.com/p/leveldb-go/leveldb"
-	//"encoding/binary"
+	"github.com/emirpasic/gods/maps/treemap"
 	"encoding/hex"
 	"strconv"
 )
@@ -15,9 +14,6 @@ const (
 	PUT
 	GET
 	SCAN
-	DELETE
-	RLOCK
-	WLOCK
 )
 
 type Value []byte
@@ -34,22 +30,24 @@ type Command struct {
 
 type State struct {
 	mutex *sync.Mutex
-	Store map[Key]Value
-	//DB *leveldb.DB
+	Store *treemap.Map
+}
+
+func KeyComparator(a, b interface{}) int {
+	aAsserted := a.(Key)
+	bAsserted := b.(Key)
+	switch {
+	case aAsserted > bAsserted:
+		return 1
+	case aAsserted < bAsserted:
+		return -1
+	default:
+		return 0
+	}
 }
 
 func InitState() *State {
-	/*
-	   d, err := leveldb.Open("/Users/iulian/git/epaxos-batching/dpaxos/bin/db", nil)
-
-	   if err != nil {
-	       fmt.Printf("Leveldb open failed: %v\n", err)
-	   }
-
-	   return &State{d}
-	*/
-
-	return &State{new(sync.Mutex), make(map[Key]Value)}
+	return &State{new(sync.Mutex), 	treemap.NewWith(KeyComparator)}
 }
 
 func Conflict(gamma *Command, delta *Command) bool {
@@ -78,33 +76,20 @@ func IsRead(command *Command) bool {
 
 func (c *Command) Execute(st *State) Value {
 
-	//var key, value [8]byte
-
 	st.mutex.Lock()
 	defer st.mutex.Unlock()
 
 	switch c.Op {
 	case PUT:
-		/*
-		   binary.LittleEndian.PutUint64(key[:], uint64(c.K))
-		   binary.LittleEndian.PutUint64(value[:], uint64(c.V))
-		   st.DB.Set(key[:], value[:], nil)
-		*/
-		st.Store[c.K] = c.V
-		return NIL()
+		st.Store.Put(c.K,c.V)
 
 	case GET:
-		if val, present := st.Store[c.K]; present {
-			return val
+		if val, present := st.Store.Get(c.K); present {
+			return val.(Value)
 		}
 
 	case SCAN:
 		val := NIL()
-		for i:=c.K; i<(c.K+100); i++{
-			if tmp, present := st.Store[c.K]; present {
-				val = tmp
-			}
-		}
 		return val
 	}
 
