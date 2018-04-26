@@ -3,7 +3,7 @@
 LOGS=logs
 
 NSERVERS=3
-NCLIENTS=10
+NCLIENTS=1
 CMDS=10000
 PSIZE=32
 TOTAL_OPS=$(( NCLIENTS * CMDS ))
@@ -51,6 +51,7 @@ clients() {
 		  -c 100 \
 		  -l \
 		  -e \
+		  -s \
 		  -psize ${PSIZE} > "${LOGS}/c_$i.txt" 2>&1 &
     done
 

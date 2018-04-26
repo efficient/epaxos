@@ -116,7 +116,9 @@ func (b *Parameters) Connect() {
 			log.Fatalf("Error making the GetLeader RPC\n")
 		}
 		b.Leader = reply.LeaderId
-		toConnect =append(toConnect,b.Leader)
+		if  b.closestReplica != b.Leader{
+			toConnect =append(toConnect,b.Leader)
+		}
 		log.Printf("The Leader is replica %d\n", b.Leader)
 	}
 
