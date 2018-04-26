@@ -248,7 +248,7 @@ func (b *Parameters) execute(args genericsmrproto.Propose) []byte{
 	}
 
 	if b.verbose{
-		log.Println("Returning: ",value)
+		log.Println("Returning: ",value.String())
 	}
 
 	return value

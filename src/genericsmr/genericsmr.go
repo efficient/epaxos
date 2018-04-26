@@ -399,9 +399,8 @@ func (r *Replica) ReplyPropose(reply *genericsmrproto.ProposeReply, w *bufio.Wri
 }
 
 func (r *Replica) ReplyProposeTS(reply *genericsmrproto.ProposeReplyTS, w *bufio.Writer) {
-	//r.clientMutex.Lock()
-	//defer r.clientMutex.Unlock()
-	//w.WriteByte(genericsmrproto.PROPOSE_REPLY)
+	r.Mutex.Lock()
+	defer r.Mutex.Unlock()
 	reply.Marshal(w)
 	w.Flush()
 }
