@@ -44,6 +44,7 @@ type Replica struct {
 	Peers        []net.Conn // cache of connections to all other replicas
 	PeerReaders  []*bufio.Reader
 	PeerWriters  []*bufio.Writer
+	PeerLocks    map[*bufio.Writer]*sync.Mutex
 	Alive        []bool // connection status
 	Listener     net.Listener
 
@@ -84,6 +85,7 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bo
 		make([]net.Conn, len(peerAddrList)),
 		make([]*bufio.Reader, len(peerAddrList)),
 		make([]*bufio.Writer, len(peerAddrList)),
+		make(map[*bufio.Writer]*sync.Mutex),
 		make([]bool, len(peerAddrList)),
 		nil,
 		state.InitState(),
@@ -306,6 +308,8 @@ func (r *Replica) clientListener(conn net.Conn) {
 	log.Println("Client up ", conn.RemoteAddr(),"(",r.LRead,")")
 	r.Mutex.Unlock()
 
+	r.PeerLocks[writer] = &sync.Mutex{}
+
 	for !r.Shutdown && err == nil {
 
 		if msgType, err = reader.ReadByte(); err != nil {
@@ -399,8 +403,8 @@ func (r *Replica) ReplyPropose(reply *genericsmrproto.ProposeReply, w *bufio.Wri
 }
 
 func (r *Replica) ReplyProposeTS(reply *genericsmrproto.ProposeReplyTS, w *bufio.Writer) {
-	r.Mutex.Lock()
-	defer r.Mutex.Unlock()
+	r.PeerLocks[w].Lock()
+	defer r.PeerLocks[w].Unlock()
 	reply.Marshal(w)
 	w.Flush()
 }
