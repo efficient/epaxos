@@ -2,9 +2,9 @@
 
 LOGS=logs
 
-NSERVERS=5
-NCLIENTS=30
-CMDS=30000
+NSERVERS=3
+NCLIENTS=10
+CMDS=1
 PSIZE=32
 TOTAL_OPS=$(( NCLIENTS * CMDS ))
 
@@ -15,7 +15,7 @@ CLIENT=bin/client
 DIFF_TOOL=diff
 #DIFF_TOOL=merge
 
-failure=1
+failure=0
 
 master() {
     ${MASTER} -N ${NSERVERS} > "${LOGS}/m.txt" 2>&1 &
@@ -47,7 +47,7 @@ clients() {
     for i in $(seq 1 $NCLIENTS); do
 	${CLIENT} -v \
 		  -q ${CMDS} \
-		  -w 100 \
+		  -w 50 \
 		  -c 100 \
 		  -l \
 		  -e \
@@ -73,20 +73,20 @@ clients() {
 }
 
 stop_all() {
+    echo ">>>>> Stopping All"
     for p in ${CLIENT} ${SERVER} ${MASTER}; do
-	ps -aux | grep ${p} | awk '{ print $2 }' | xargs kill -9
+	ps -aux | grep ${p} | awk '{ print $2 }' | xargs kill -9 >& /dev/null
     done
-    ps -aux | grep "tail -f ${LOGS}/m.txt" | awk '{ print $2 }' | xargs kill -9
+    ps -aux | grep "tail -f ${LOGS}/m.txt" | awk '{ print $2 }' | xargs kill -9 >& /dev/null
+    true
 }
 
 start_exp() {
-    rm -rf ${LOGS}
-    mkdir ${LOGS}
+    rm -rf ${LOGS}/*
     stop_all
 }
 
 end_exp() {
-    stop_all
     all=()
     for i in $(seq 1 ${NSERVERS}); do
 	f="${LOGS}/$i.ops"
@@ -130,3 +130,4 @@ clients
 end_exp
 
 stop_all
+
