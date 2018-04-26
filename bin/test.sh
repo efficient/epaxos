@@ -2,9 +2,9 @@
 
 LOGS=logs
 
-NSERVERS=5
-NCLIENTS=30
-CMDS=30000
+NSERVERS=3
+NCLIENTS=10
+CMDS=10000
 PSIZE=32
 TOTAL_OPS=$(( NCLIENTS * CMDS ))
 
@@ -15,7 +15,7 @@ CLIENT=bin/client
 DIFF_TOOL=diff
 #DIFF_TOOL=merge
 
-failure=1
+failure=0
 
 master() {
     ${MASTER} -N ${NSERVERS} > "${LOGS}/m.txt" 2>&1 &
@@ -27,7 +27,6 @@ servers() {
     for i in $(seq 1 ${NSERVERS}); do
 	port=$(( 7000 + $i ))
 	${SERVER}\
-	    -e \
 	    -lread \
 	    -exec \
 	    -thrifty \
@@ -47,7 +46,7 @@ clients() {
     for i in $(seq 1 $NCLIENTS); do
 	${CLIENT} -v \
 		  -q ${CMDS} \
-		  -w 100 \
+		  -w 80 \
 		  -c 100 \
 		  -l \
 		  -e \
