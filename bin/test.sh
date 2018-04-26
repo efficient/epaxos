@@ -27,6 +27,7 @@ servers() {
     for i in $(seq 1 ${NSERVERS}); do
 	port=$(( 7000 + $i ))
 	${SERVER}\
+	    -e \
 	    -lread \
 	    -exec \
 	    -thrifty \
@@ -129,4 +130,3 @@ clients
 end_exp
 
 stop_all
-

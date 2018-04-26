@@ -5,6 +5,8 @@ import (
 	"github.com/emirpasic/gods/maps/treemap"
 	"encoding/hex"
 	"strconv"
+	"encoding/binary"
+	"fmt"
 )
 
 type Operation uint8
@@ -46,6 +48,20 @@ func KeyComparator(a, b interface{}) int {
 	}
 }
 
+func concat(slices []Value) Value{
+	var totalLen int
+	for _, s := range slices {
+		totalLen += len(s)
+	}
+	tmp := make([]byte, totalLen)
+	var i int
+	for _, s := range slices {
+		i += copy(tmp[i:], s)
+	}
+	return tmp
+}
+
+
 func InitState() *State {
 	return &State{new(sync.Mutex), 	treemap.NewWith(KeyComparator)}
 }
@@ -74,6 +90,7 @@ func IsRead(command *Command) bool {
 	return command.Op == GET
 }
 
+
 func (c *Command) Execute(st *State) Value {
 
 	st.mutex.Lock()
@@ -84,13 +101,24 @@ func (c *Command) Execute(st *State) Value {
 		st.Store.Put(c.K,c.V)
 
 	case GET:
-		if val, present := st.Store.Get(c.K); present {
-			return val.(Value)
+		if value, present := st.Store.Get(c.K); present {
+			valAsserted := value.(Value)
+			return valAsserted
 		}
 
 	case SCAN:
-		val := NIL()
-		return val
+		found := make([]Value,0)
+		count := binary.LittleEndian.Uint64(c.V)
+		it := st.Store.Select(func(index interface{}, value interface{}) bool {
+			keyAsserted := index.(Key)
+			return keyAsserted >= c.K && keyAsserted <= c.K + Key(count)
+		}).Iterator()
+		for it.Next() {
+			valAsserted := it.Value().(Value)
+			found = append(found, valAsserted)
+		}
+		ret := concat(found)
+		return ret
 	}
 
 	return NIL()
@@ -111,7 +139,8 @@ func (t *Command) String() string{
 	} else if t.Op==GET {
 		ret="GET( "+t.K.String()+" )"
 	} else if t.Op==SCAN {
-		ret="SCAN( " + t.V.String() + " , " + t.K.String() + " )"
+		count := binary.LittleEndian.Uint64(t.V)
+		ret="SCAN( " + t.K.String() + " , " +  fmt.Sprint(count) + " )"
 	} else {
 		ret="UNKNOWN( " + t.V.String() + " , " + t.K.String() + " )"
 	}

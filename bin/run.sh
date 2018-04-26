@@ -81,6 +81,7 @@ fi;
 #   -v	verbose mode.
 #   -w int
 #     	Percentage of updates (writes).  (default 100)
+#   -s	replace read with short scan (100 elements)
 
 
 if [ "${TYPE}" == "client" ];

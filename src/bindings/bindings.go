@@ -16,6 +16,7 @@ import (
 	"time"
 	"errors"
 	"bytes"
+	"encoding/binary"
 )
 
 const TRUE = uint8(1)
@@ -173,11 +174,13 @@ func (b *Parameters) Read(key int64) []byte{
 	return b.execute(args)
 }
 
-func (b *Parameters) Scan(key int64) []byte{
+func (b *Parameters) Scan(key int64, count int64) []byte{
 	b.id++
 	args := genericsmrproto.Propose{b.id, state.Command{state.PUT, 0, state.NIL()}, 0}
 	args.CommandId = b.id
 	args.Command.K = state.Key(key)
+	args.Command.V = make([]byte, 8)
+	binary.LittleEndian.PutUint64(args.Command.V, uint64(count))
 	args.Command.Op = state.SCAN
 
 	if b.verbose{

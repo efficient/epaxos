@@ -24,6 +24,7 @@ var localReads *bool = flag.Bool("l", true, "Execute reads at the closest (local
 var procs *int = flag.Int("p", 2, "GOMAXPROCS. ")
 var conflicts *int = flag.Int("c", 0, "Percentage of conflicts. Defaults to 0%")
 var verbose *bool = flag.Bool("v", false, "verbose mode. ")
+var scan *bool = flag.Bool("s", false, "replace read with short scan (100 elements)")
 
 func main() {
 
@@ -78,7 +79,11 @@ func main() {
 			rand.Read(value)
 			proxy.Write(int64(karray[j]),state.Value(value))
 		} else {
-			proxy.Read(int64(karray[j]))
+			if *scan{
+				proxy.Scan(int64(karray[j]),int64(100))
+			}else{
+				proxy.Read(int64(karray[j]))
+			}
 		}
 
 		after := time.Now()
