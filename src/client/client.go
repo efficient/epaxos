@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bindings"
 	"flag"
 	"fmt"
 	"github.com/google/uuid"
@@ -9,7 +10,6 @@ import (
 	"runtime"
 	"state"
 	"time"
-	"bindings"
 )
 
 var clientId string = *flag.String("id", "", "the id of the client. Default is RFC 4122 nodeID.")
@@ -38,14 +38,14 @@ func main() {
 		log.Fatalf("Conflicts percentage must be between 0 and 100.\n")
 	}
 
-	proxy := bindings.NewParameters(*masterAddr,*masterPort,*verbose,*noLeader,*fast,*localReads)
+	proxy := bindings.NewParameters(*masterAddr, *masterPort, *verbose, *noLeader, *fast, *localReads)
 	proxy.Connect()
 
 	if clientId == "" {
 		clientId = uuid.New().String()
 	}
 
-	log.Printf("client: %v",clientId)
+	log.Printf("client: %v", clientId)
 
 	karray := make([]state.Key, *reqsNb)
 	put := make([]bool, *reqsNb)
@@ -75,9 +75,9 @@ func main() {
 		before := time.Now()
 
 		if put[j] {
-			value :=make([]byte,*psize)
+			value := make([]byte, *psize)
 			rand.Read(value)
-			proxy.Write(int64(karray[j]),state.Value(value))
+			proxy.Write(int64(karray[j]), state.Value(value))
 		} else {
 			if *scan{
 				proxy.Scan(int64(karray[j]),int64(100))
@@ -88,14 +88,20 @@ func main() {
 
 		after := time.Now()
 
-		fmt.Printf("%v \n",after.Sub(before))
-
+		duration := after.Sub(before)
+		fmt.Printf("latency %d\n", to_ms(duration.Nanoseconds()))
+		fmt.Printf("chain %d-1\n", to_ms(after.UnixNano()))
 	}
 
-	fmt.Printf(proxy.Stats()+"\n")
+	fmt.Printf(proxy.Stats() + "\n")
 
 	proxy.Disconnect()
 
 	after_total := time.Now()
 	fmt.Printf("Test took %v\n", after_total.Sub(before_total))
+}
+
+// convert nanosecond to millisecond
+func to_ms(nano int64) int64 {
+  return nano / 1000000
 }

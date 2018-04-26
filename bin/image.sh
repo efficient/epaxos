@@ -9,16 +9,19 @@ fi
 DOCKER_USER=$(docker info |
               grep Username |
               awk '{print $2}')
-GIT_USER=$(git config remote.origin.url |
-           awk -F/ '{ print $4 }')
+if [ -z "${DOCKER_USER}" ]; then
+  DOCKER_USER=vitorenesduarte
+fi
 
 DIR=$(dirname "$0")
 IMAGE=${DOCKER_USER}/epaxos:${TAG}
 DOCKERFILE=${DIR}/../Dockerfile
 
+# epaxos version: last commit hash
+git log -1 --format="%H" > ${DIR}/../epaxos-version
+
 # build image
 docker build \
-  --build-arg user=${GIT_USER} \
   --no-cache \
   -t "${IMAGE}" -f "${DOCKERFILE}" .
 
