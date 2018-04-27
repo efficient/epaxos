@@ -74,15 +74,17 @@ func main() {
 
 		before := time.Now()
 
+		key := int64(karray[j])
+
 		if put[j] {
 			value := make([]byte, *psize)
 			rand.Read(value)
-			proxy.Write(int64(karray[j]), state.Value(value))
+			proxy.Write(key, state.Value(value))
 		} else {
 			if *scan{
-				proxy.Scan(int64(karray[j]),int64(100))
+				proxy.Scan(key,int64(100))
 			}else{
-				proxy.Read(int64(karray[j]))
+				proxy.Read(key)
 			}
 		}
 
