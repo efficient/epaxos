@@ -164,7 +164,7 @@ func (na nodeArray) Len() int {
 }
 
 func (na nodeArray) Less(i, j int) bool {
-	return na[i].Seq < na[j].Seq || (na[i].Seq == na[j].Seq && na[i].Coordinator < na[j].Coordinator) || (na[i].Seq == na[j].Seq && na[i].Coordinator == na[j].Coordinator && na[i].Cmds[0].String() < na[j].Cmds[0].String())
+	return na[i].Seq < na[j].Seq || (na[i].Seq == na[j].Seq && na[i].Coordinator < na[j].Coordinator) || (na[i].Seq == na[j].Seq && na[i].Coordinator == na[j].Coordinator && na[i].proposeTime < na[j].proposeTime)
 }
 
 func (na nodeArray) Swap(i, j int) {
