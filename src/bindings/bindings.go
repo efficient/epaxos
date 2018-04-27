@@ -57,7 +57,7 @@ func NewParameters(masterAddr string, masterPort int, verbose bool, leaderless b
 		0,
 		5}}
 
-func (b *Parameters) Connect() {
+func (b *Parameters) Connect() error {
 
 	master, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", b.masterAddr, b.masterPort))
 	if err != nil {
@@ -126,7 +126,8 @@ func (b *Parameters) Connect() {
 		log.Println("Connection to ", i, " -> ",b.replicaLists[i])
 		b.servers[i], err = net.DialTimeout("tcp", b.replicaLists[i], 10*time.Second)
 		if err != nil {
-			log.Fatal("Connection error with ", b.replicaLists[i])
+			log.Println("Connection error with ", b.replicaLists[i])
+			return err
 		} else {
 			b.readers[i] = bufio.NewReader(b.servers[i])
 			b.writers[i] = bufio.NewWriter(b.servers[i])
@@ -134,6 +135,8 @@ func (b *Parameters) Connect() {
 	}
 
 	log.Println("Connected")
+
+	return nil
 
 }
 
@@ -238,16 +241,21 @@ func (b *Parameters) execute(args genericsmrproto.Propose) []byte{
 		value, err = b.waitReplies(submitter)
 
 		if err!=nil{
+
 			log.Println("Error: ", err)
-			if b.retries>0{
+
+			for err != nil && b.retries > 0 {
 				b.retries--
 				b.Disconnect()
 				log.Println("Reconnecting ...")
 				time.Sleep(10 * time.Second) // must be inline with the closest quorum re-computation
-				b.Connect()
-			}else{
+				err = b.Connect()
+			}
+
+			if err!=nil && b.retries == 0{
 				log.Fatal("Cannot recover.")
 			}
+
 		}
 
 	}
