@@ -30,6 +30,7 @@ type RPCPair struct {
 type Propose struct {
 	*genericsmrproto.Propose
 	Reply *bufio.Writer
+	Mutex *sync.Mutex
 }
 
 type Beacon struct {
@@ -44,7 +45,6 @@ type Replica struct {
 	Peers        []net.Conn // cache of connections to all other replicas
 	PeerReaders  []*bufio.Reader
 	PeerWriters  []*bufio.Writer
-	PeerLocks    map[*bufio.Writer]*sync.Mutex
 	Alive        []bool // connection status
 	Listener     net.Listener
 
@@ -85,7 +85,6 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bo
 		make([]net.Conn, len(peerAddrList)),
 		make([]*bufio.Reader, len(peerAddrList)),
 		make([]*bufio.Writer, len(peerAddrList)),
-		make(map[*bufio.Writer]*sync.Mutex),
 		make([]bool, len(peerAddrList)),
 		nil,
 		state.InitState(),
@@ -308,7 +307,7 @@ func (r *Replica) clientListener(conn net.Conn) {
 	log.Println("Client up ", conn.RemoteAddr(),"(",r.LRead,")")
 	r.Mutex.Unlock()
 
-	r.PeerLocks[writer] = &sync.Mutex{}
+	mutex := &sync.Mutex{}
 
 	for !r.Shutdown && err == nil {
 
@@ -330,9 +329,9 @@ func (r *Replica) clientListener(conn net.Conn) {
 					propose.CommandId,
 					val,
 					propose.Timestamp}
-				r.ReplyProposeTS(propreply, writer)
+				r.ReplyProposeTS(propreply, writer, mutex)
 			}else{
-				r.ProposeChan <- &Propose{propose, writer}
+				r.ProposeChan <- &Propose{propose, writer, mutex}
 			}
 			break
 
@@ -394,17 +393,9 @@ func (r *Replica) SendMsgNoFlush(peerId int32, code uint8, msg fastrpc.Serializa
 	msg.Marshal(w)
 }
 
-func (r *Replica) ReplyPropose(reply *genericsmrproto.ProposeReply, w *bufio.Writer) {
-	//r.clientMutex.Lock()
-	//defer r.clientMutex.Unlock()
-	//w.WriteByte(genericsmrproto.PROPOSE_REPLY)
-	reply.Marshal(w)
-	w.Flush()
-}
-
-func (r *Replica) ReplyProposeTS(reply *genericsmrproto.ProposeReplyTS, w *bufio.Writer) {
-	r.PeerLocks[w].Lock()
-	defer r.PeerLocks[w].Unlock()
+func (r *Replica) ReplyProposeTS(reply *genericsmrproto.ProposeReplyTS, w *bufio.Writer, lock *sync.Mutex) {
+	r.Mutex.Lock()
+	defer r.Mutex.Unlock()
 	reply.Marshal(w)
 	w.Flush()
 }

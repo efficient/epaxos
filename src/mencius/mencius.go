@@ -772,7 +772,7 @@ func (r *Replica) updateBlocking(instance int32) {
 					// give client the all clear
 					dlog.Printf("Sending ACK for req. %d\n", inst.lb.clientProposal.CommandId)
 					r.ReplyProposeTS(&genericsmrproto.ProposeReplyTS{TRUE, inst.lb.clientProposal.CommandId, state.NIL(), inst.lb.clientProposal.Timestamp},
-						inst.lb.clientProposal.Reply)
+						inst.lb.clientProposal.Reply, inst.lb.clientProposal.Mutex)
 				}
 				skip := FALSE
 				if inst.skipped {
@@ -859,7 +859,8 @@ func (r *Replica) executeCommands() {
 				val := inst.command.Execute(r.State)
 				dlog.Printf("Sending ACK for req. %d\n", inst.lb.clientProposal.CommandId)
 				r.ReplyProposeTS(&genericsmrproto.ProposeReplyTS{TRUE, inst.lb.clientProposal.CommandId, val, inst.lb.clientProposal.Timestamp},
-					inst.lb.clientProposal.Reply)
+					inst.lb.clientProposal.Reply,
+					inst.lb.clientProposal.Mutex)
 			} else if inst.command.Op == state.PUT{
 				inst.command.Execute(r.State)
 			}

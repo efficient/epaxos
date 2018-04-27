@@ -1038,7 +1038,8 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 						inst.lb.clientProposals[i].CommandId,
 						state.NIL(),
 						inst.lb.clientProposals[i].Timestamp},
-					inst.lb.clientProposals[i].Reply)
+					inst.lb.clientProposals[i].Reply,
+					inst.lb.clientProposals[i].Mutex)
 			}
 		}
 
@@ -1166,7 +1167,8 @@ func (r *Replica) handleAcceptReply(areply *epaxosproto.AcceptReply) {
 						inst.lb.clientProposals[i].CommandId,
 						state.NIL(),
 						inst.lb.clientProposals[i].Timestamp},
-					inst.lb.clientProposals[i].Reply)
+					inst.lb.clientProposals[i].Reply,
+					inst.lb.clientProposals[i].Mutex)
 			}
 		}
 

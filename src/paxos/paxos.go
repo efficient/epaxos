@@ -372,7 +372,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	if !r.IsLeader {
 		dlog.Printf("Not the leader, cannot propose %v\n", propose.CommandId)
 		preply := &genericsmrproto.ProposeReplyTS{FALSE, -1, state.NIL(), 0}
-		r.ReplyProposeTS(preply, propose.Reply)
+		r.ReplyProposeTS(preply, propose.Reply, propose.Mutex)
 		return
 	}
 
@@ -622,7 +622,7 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 						inst.lb.clientProposals[i].CommandId,
 						state.NIL(),
 						inst.lb.clientProposals[i].Timestamp}
-					r.ReplyProposeTS(propreply, inst.lb.clientProposals[i].Reply)
+					r.ReplyProposeTS(propreply, inst.lb.clientProposals[i].Reply, inst.lb.clientProposals[i].Mutex)
 				}
 			}
 
@@ -661,7 +661,7 @@ func (r *Replica) executeCommands() {
 							inst.lb.clientProposals[j].CommandId,
 							val,
 							inst.lb.clientProposals[j].Timestamp}
-						r.ReplyProposeTS(propreply, inst.lb.clientProposals[j].Reply)
+						r.ReplyProposeTS(propreply, inst.lb.clientProposals[j].Reply, inst.lb.clientProposals[j].Mutex)
 					} else if inst.cmds[j].Op == state.PUT {
 						inst.cmds[j].Execute(r.State)
 					}
