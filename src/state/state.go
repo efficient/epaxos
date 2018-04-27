@@ -108,14 +108,14 @@ func (c *Command) Execute(st *State) Value {
 
 	case SCAN:
 		found := make([]Value,0)
-		count := binary.LittleEndian.Uint64(c.V)
-		it := st.Store.Select(func(index interface{}, value interface{}) bool {
-			keyAsserted := index.(Key)
-			return keyAsserted >= c.K && keyAsserted <= c.K + Key(count)
-		}).Iterator()
-		for it.Next() {
-			valAsserted := it.Value().(Value)
-			found = append(found, valAsserted)
+		count := int64(binary.LittleEndian.Uint64(c.V))
+		key := int64(c.K)
+		for key <= int64(c.K) + count {
+			if val,exist := st.Store.Get(Key(key)); exist{
+				valAsserted := val.(Value)
+				found = append(found, valAsserted)
+			}
+			key++
 		}
 		ret := concat(found)
 		return ret

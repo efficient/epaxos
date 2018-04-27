@@ -3,7 +3,7 @@
 LOGS=logs
 
 NSERVERS=5
-NCLIENTS=10
+NCLIENTS=30
 CMDS=10000
 PSIZE=32
 TOTAL_OPS=$(( NCLIENTS * CMDS ))
@@ -15,7 +15,7 @@ CLIENT=bin/client
 DIFF_TOOL=diff
 #DIFF_TOOL=merge
 
-failure=0
+failure=1
 
 master() {
     ${MASTER} -N ${NSERVERS} > "${LOGS}/m.txt" 2>&1 &
