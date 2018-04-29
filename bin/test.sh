@@ -2,7 +2,7 @@
 
 LOGS=logs
 
-NSERVERS=5
+NSERVERS=7
 NCLIENTS=30
 CMDS=10000
 PSIZE=32
@@ -15,9 +15,10 @@ CLIENT=bin/client
 DIFF_TOOL=diff
 #DIFF_TOOL=merge
 
-failure=1
+failure=3
 
 master() {
+    touch ${LOGS}/m.txt
     ${MASTER} -N ${NSERVERS} > "${LOGS}/m.txt" 2>&1 &
     tail -f ${LOGS}/m.txt &
 }
@@ -27,7 +28,6 @@ servers() {
     for i in $(seq 1 ${NSERVERS}); do
 	port=$(( 7000 + $i ))
 	${SERVER}\
-	    -e \
 	    -lread \
 	    -exec \
 	    -thrifty \
@@ -50,14 +50,12 @@ clients() {
 		  -w 50 \
 		  -c 100 \
 		  -l \
-		  -e \
-		  -s \
 		  -psize ${PSIZE} > "${LOGS}/c_$i.txt" 2>&1 &
     done
 
     ended=-1
     while [ ${ended} != ${NCLIENTS} ]; do
-	ended=$(cat logs/c_*.txt  | grep "Test took" | wc -l)
+	ended=$(tail -n 1 logs/c_*.txt  | grep "Test took" | wc -l)
 	sleep 1
 	if (( ${failure} > 0 ));
 	then
