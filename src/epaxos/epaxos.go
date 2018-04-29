@@ -74,6 +74,7 @@ type Replica struct {
 	latestCPInstance      int32
 	clientMutex           *sync.Mutex // for synchronizing when sending replies to clients from multiple go-routines
 	instancesToRecover    chan *instanceId
+	IsLeader              bool        // does this replica think it is the leader
 }
 
 type Instance struct {
@@ -146,7 +147,8 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bo
 		0,
 		-1,
 		new(sync.Mutex),
-		make(chan *instanceId, genericsmr.CHAN_BUFFER_SIZE)}
+		make(chan *instanceId, genericsmr.CHAN_BUFFER_SIZE),
+		false}
 
 	r.Beacon = beacon
 	r.Durable = durable
@@ -434,12 +436,13 @@ func (r *Replica) executeCommands() {
 					if inst == problemInstance[q] {
 						timeout[q] += SLEEP_TIME_NS
 						if timeout[q] >= COMMIT_GRACE_PERIOD {
-							dlog.Printf("Recovery for %d.%d", q, inst)
-							r.instancesToRecover <- &instanceId{int32(q), inst}
-							timeout[q] = 0
+							if r.IsLeader || timeout[q] >= COMMIT_GRACE_PERIOD * uint64(r.Id+1){
+								dlog.Printf("Recovery for %d.%d", q, inst)
+								r.instancesToRecover <- &instanceId{int32(q), inst}
+								timeout[q] = 0
+							}
 						}
 					} else {
-						dlog.Printf("Problem with %d.%d\n", q,inst)
 						problemInstance[q] = inst
 						timeout[q] = 0
 					}
@@ -457,6 +460,8 @@ func (r *Replica) executeCommands() {
 			}
 		}
 		if !executed {
+			r.Mutex.Lock()
+			r.Mutex.Unlock() // FIXME for cache coherence
 			time.Sleep(SLEEP_TIME_NS)
 		}
 		//log.Println(r.ExecedUpTo, " ", r.crtInstance)
@@ -663,11 +668,13 @@ func (r *Replica) clearHashtables() {
 }
 
 func (r *Replica) updateCommitted(replica int32) {
+	r.Mutex.Lock()
 	for r.InstanceSpace[replica][r.CommittedUpTo[replica]+1] != nil &&
 		(r.InstanceSpace[replica][r.CommittedUpTo[replica]+1].Status == epaxosproto.COMMITTED ||
 			r.InstanceSpace[replica][r.CommittedUpTo[replica]+1].Status == epaxosproto.EXECUTED) {
 		r.CommittedUpTo[replica] = r.CommittedUpTo[replica] + 1
 	}
+	r.Mutex.Unlock()
 }
 
 func (r *Replica) updateConflicts(cmds []state.Command, replica int32, instance int32, seq int32) {
@@ -1292,6 +1299,15 @@ func (r *Replica) handleCommitShort(commit *epaxosproto.CommitShort) {
 
 ***********************************************************************/
 
+func (r *Replica) BeTheLeader(args *genericsmrproto.BeTheLeaderArgs, reply *genericsmrproto.BeTheLeaderReply) error {
+	r.Mutex.Lock()
+	r.IsLeader = true
+	log.Println("I am the leader")
+	time.Sleep(5*time.Second) // wait that the connection is actually lost
+	r.Mutex.Unlock()
+	return nil
+}
+
 func (r *Replica) startRecoveryForInstance(replica int32, instance int32) {
 	var nildeps []int32
 
@@ -1493,7 +1509,7 @@ func (r *Replica) handlePrepareReply(preply *epaxosproto.PrepareReply) {
 		inst.lb.preparing = false
 		r.InstanceSpace[preply.Replica][preply.Instance] = &Instance{
 			preply.Replica,
-			nil,
+			state.NOOP(),
 			inst.ballot,
 			epaxosproto.ACCEPTED,
 			0,

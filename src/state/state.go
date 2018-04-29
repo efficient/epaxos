@@ -30,6 +30,8 @@ type Command struct {
 	V  Value
 }
 
+func NOOP() []Command {return []Command {{NONE, 0, NIL()}}}
+
 type State struct {
 	mutex *sync.Mutex
 	Store *treemap.Map

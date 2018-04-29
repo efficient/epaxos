@@ -125,7 +125,9 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 		for _, w := range list {
 			for idx := 0; idx < len(w.Cmds); idx++ {
 				dlog.Printf("Executing "+w.Cmds[idx].String()+" (%d,%d)[%d], deps=%d, scc_size=%d",w.Coordinator,w.Seq,idx,w.Deps,len(list))
-				if e.r.Dreply && w.lb != nil && w.lb.clientProposals != nil {
+				if w.Cmds[idx].Op == state.NONE {
+					dlog.Printf("Skipping no-op command")
+				} else if e.r.Dreply && w.lb != nil && w.lb.clientProposals != nil {
 					val := w.Cmds[idx].Execute(e.r.State)
 
 					e.r.ReplyProposeTS(
