@@ -37,6 +37,7 @@ type Replica struct {
 	instanceSpace       []*Instance // the space of all instances (used and not yet used)
 	crtInstance         int32       // highest active instance number that this replica knows about
 	defaultBallot       int32       // default ballot for new instances (0 until a Prepare(ballot, instance->infinity) from a leader)
+	maxRecvBallot       int32
 	Shutdown            bool
 	counter             int
 	flush               bool
@@ -61,7 +62,6 @@ type Instance struct {
 
 type LeaderBookkeeping struct {
 	clientProposals []*genericsmr.Propose
-	maxRecvBallot   int32
 	prepareOKs      int
 	acceptOKs       int
 	nacks           int
@@ -79,6 +79,7 @@ func NewReplica(id int, peerAddrList []string, Isleader bool, thrifty bool, exec
 		false,
 		make([]*Instance, 15*1024*1024),
 		0,
+		-1,
 		-1,
 		false,
 		0,
@@ -257,6 +258,10 @@ func (r *Replica) makeBallot(instance int32) int32 {
 		ret = r.defaultBallot + 1
 	}
 
+	if r.maxRecvBallot > ret{
+		ret = r.maxRecvBallot + 1
+	}
+
 	return ret
 }
 
@@ -408,7 +413,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 			cmds,
 			ballot,
 			PREPARING,
-			&LeaderBookkeeping{proposals, ballot, 0, 0, 0}}
+			&LeaderBookkeeping{proposals, 0, 0, 0}}
 	}
 
 	if r.defaultBallot != ballot {
@@ -579,14 +584,14 @@ func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
 			r.bcastAccept(preply.Instance, inst.ballot, inst.cmds)
 		}
 	} else {
-		dlog.Printf("There is another active leader.")
+		dlog.Printf("There is another active leader (",preply.Ballot," > ",r.maxRecvBallot,")")
 		// TODO: there is probably another active leader
 		inst.lb.nacks++
 		if preply.Command != nil{
 			inst.cmds = preply.Command
 		}
-		if preply.Ballot > inst.lb.maxRecvBallot {
-			inst.lb.maxRecvBallot = preply.Ballot
+		if preply.Ballot > r.maxRecvBallot {
+			r.maxRecvBallot = preply.Ballot
 		}
 		if inst.lb.nacks >= r.N>>1 {
 			if inst.lb.clientProposals != nil {
@@ -632,11 +637,11 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 			r.updateCommittedUpTo()
 		}
 	} else {
-		dlog.Printf("There is another active leader.")
+		dlog.Printf("There is another active leader (",areply.Ballot," > ",r.maxRecvBallot,")")
 		// TODO: there is probably another active leader
 		inst.lb.nacks++
-		if areply.Ballot > inst.lb.maxRecvBallot {
-			inst.lb.maxRecvBallot = areply.Ballot
+		if areply.Ballot > r.maxRecvBallot {
+			r.maxRecvBallot = areply.Ballot
 		}
 		if inst.lb.nacks >= r.N>>1 {
 			// TODO
@@ -649,6 +654,7 @@ func (r *Replica) executeCommands() {
 	for !r.Shutdown {
 		executed := false
 
+		// FIXME idempotence
 		for i <= r.committedUpTo {
 			if r.instanceSpace[i].cmds != nil {
 				inst := r.instanceSpace[i]
