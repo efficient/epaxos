@@ -23,7 +23,7 @@ const TRUE = uint8(1)
 const FALSE = uint8(0)
 const ADAPT_TIME_SEC = 10
 
-const MAX_BATCH = 1000
+const MAX_BATCH = 1
 
 const COMMIT_GRACE_PERIOD = 1 * 1e9 // 1 second(s)
 
@@ -181,7 +181,7 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bo
 	r.tryPreAcceptRPC = r.RegisterRPC(new(epaxosproto.TryPreAccept), r.tryPreAcceptChan)
 	r.tryPreAcceptReplyRPC = r.RegisterRPC(new(epaxosproto.TryPreAcceptReply), r.tryPreAcceptReplyChan)
 
-	r.Stats.M["weird"], r.Stats.M["conflicted"], r.Stats.M["slow"], r.Stats.M["fast"], r.Stats.M["totalCommitTime"] = 0, 0, 0, 0, 0
+	r.Stats.M["weird"], r.Stats.M["conflicted"], r.Stats.M["slow"], r.Stats.M["fast"], r.Stats.M["totalCommitTime"], r.Stats.M["totalBatching"], r.Stats.M["totalBatchingSize"] = 0, 0, 0, 0, 0, 0, 0
 
 	go r.run()
 
@@ -309,7 +309,9 @@ func (r *Replica) run() {
 			r.handlePropose(propose)
 			//deactivate new proposals channel to prioritize the handling of other protocol messages,
 			//and to allow commands to accumulate for batching
-			onOffProposeChan = nil
+			if MAX_BATCH > 100 {
+				onOffProposeChan = nil
+			}
 			break
 
 		case <-fastClockChan:
@@ -785,6 +787,8 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	if batchSize > MAX_BATCH {
 		batchSize = MAX_BATCH
 	}
+	r.Stats.M["totalBatching"] ++
+	r.Stats.M["totalBatchingSize"] += batchSize
 
 	instNo := r.crtInstance[r.Id]
 	r.crtInstance[r.Id]++

@@ -198,7 +198,7 @@ func (b *Parameters) Scan(key int64, count int64) []byte{
 func (b *Parameters) Stats() (string){
 	b.writers[b.closestReplica].WriteByte(genericsmrproto.STATS)
 	b.writers[b.closestReplica].Flush()
-	arr := make([]byte,100)
+	arr := make([]byte,1000)
 	b.readers[b.closestReplica].Read(arr)
 	return string(bytes.Trim(arr, "\x00"))
 }
