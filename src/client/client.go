@@ -105,5 +105,5 @@ func main() {
 
 // convert nanosecond to millisecond
 func to_ms(nano int64) int64 {
-  return nano / 1000000
+  return nano / int64(time.Millisecond)
 }
