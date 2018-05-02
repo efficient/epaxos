@@ -214,6 +214,8 @@ func (b *Parameters) execute(args genericsmrproto.Propose) []byte{
 	err:=errors.New("")
 	value:=state.NIL()
 
+	before := time.Now()
+
 	for err!=nil {
 
 		submitter := b.Leader
@@ -263,6 +265,11 @@ func (b *Parameters) execute(args genericsmrproto.Propose) []byte{
 	if b.verbose{
 		log.Println("Returning: ",value.String())
 	}
+
+	after := time.Now()
+
+	duration := after.Sub(before)
+	fmt.Printf("latency %d\n", duration.Nanoseconds()/int64(time.Millisecond))
 
 	return value
 }

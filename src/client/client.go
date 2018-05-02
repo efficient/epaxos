@@ -90,8 +90,8 @@ func main() {
 
 		after := time.Now()
 
-		duration := after.Sub(before)
-		fmt.Printf("latency %d\n", to_ms(duration.Nanoseconds()))
+		// duration := after.Sub(before)
+		// fmt.Printf("latency %d\n", to_ms(duration.Nanoseconds()))
 		fmt.Printf("chain %d-1\n", to_ms(after.UnixNano()))
 	}
 
