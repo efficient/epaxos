@@ -23,7 +23,7 @@ const TRUE = uint8(1)
 const FALSE = uint8(0)
 const ADAPT_TIME_SEC = 10
 
-const MAX_BATCH = 1
+const MAX_BATCH = 1000
 
 const COMMIT_GRACE_PERIOD = 1 * 1e9 // 1 second(s)
 
