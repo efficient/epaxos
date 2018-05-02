@@ -72,7 +72,7 @@ func main() {
 
 	for j := 0; j < *reqsNb; j++ {
 
-		// before := time.Now()
+		before := time.Now()
 
 		key := int64(karray[j])
 
@@ -90,8 +90,8 @@ func main() {
 
 		after := time.Now()
 
-		// duration := after.Sub(before)
-		// fmt.Printf("latency %d\n", to_ms(duration.Nanoseconds()))
+		duration := after.Sub(before)
+		fmt.Printf("latency %d\n", to_ms(duration.Nanoseconds()))
 		fmt.Printf("chain %d-1\n", to_ms(after.UnixNano()))
 	}
 
