@@ -72,7 +72,7 @@ func main() {
 
 	for j := 0; j < *reqsNb; j++ {
 
-		before := time.Now()
+		// before := time.Now()
 
 		key := int64(karray[j])
 
