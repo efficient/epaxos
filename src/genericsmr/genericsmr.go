@@ -322,8 +322,8 @@ func (r *Replica) clientListener(conn net.Conn) {
 			if err = propose.Unmarshal(reader); err != nil {
 				break
 			}
+			dlog.Println("Got proposal (key=",propose.Command.K.String(),"value=",propose.Command.V.String(),")")
 			if r.LRead && (propose.Command.Op == state.GET || propose.Command.Op == state.SCAN) {
-				dlog.Println("Local call (key=",propose.Command.K.String(),")")
 				val := propose.Command.Execute(r.State)
 				propreply := &genericsmrproto.ProposeReplyTS{
 					TRUE,
