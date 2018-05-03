@@ -96,6 +96,12 @@ then
         #echo "> Client $i of ${NCLIENTS} started!"
     done
 
+    started=-1
+    while [ ${started} != ${NCLIENTS} ]; do
+        started=$(cat logs/c_*.txt  | grep "Connected" | wc -l)
+    done
+    echo "Connect OK!"
+
     ended=-1
     while [ ${ended} != ${NCLIENTS} ]; do
         ended=$(cat logs/c_*.txt  | grep "Test took" | wc -l)
