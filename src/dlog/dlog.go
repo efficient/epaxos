@@ -2,7 +2,7 @@ package dlog
 
 import "log"
 
-const DLOG = true
+const DLOG = false
 
 func Printf(format string, v ...interface{}) {
 	if !DLOG {
