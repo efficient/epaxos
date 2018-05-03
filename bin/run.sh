@@ -98,7 +98,7 @@ then
 
     ended=-1
     while [ ${ended} != ${NCLIENTS} ]; do
-        ended=$(cat logs/c_*.txt  | grep "Disconnected" | wc -l)
+        ended=$(cat logs/c_*.txt  | grep "Test took" | wc -l)
         echo "> Ended ${ended} of ${NCLIENTS}!"
         #ls -d logs/* | xargs wc -l
         sleep 10
