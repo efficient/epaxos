@@ -257,11 +257,11 @@ func (r *Replica) makeBallot(instance int32) int32 {
 	ret := r.Id
 
 	if r.defaultBallot > ret{
-		ret = r.defaultBallot + 10
+		ret = r.defaultBallot + 1
 	}
 
 	if r.maxRecvBallot > ret{
-		ret = r.maxRecvBallot + 10
+		ret = r.maxRecvBallot + 1
 	}
 
 	return ret
@@ -384,12 +384,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	}
 
 	for r.instanceSpace[r.crtInstance] != nil {
-		if r.instanceSpace[r.crtInstance].status == COMMITTED {
-			r.crtInstance++
-		}else{
-			r.instanceSpace[r.crtInstance].status = PREPARING
-			break
-		}
+		r.crtInstance++
 	}
 
 	instNo := r.crtInstance
@@ -415,11 +410,13 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	}
 
 	ballot := r.makeBallot(instNo)
-	r.instanceSpace[instNo] = &Instance{
-		cmds,
-		ballot,
-		PREPARING,
-		&LeaderBookkeeping{proposals, 0, 0, 0}}
+	if r.instanceSpace[instNo] == nil {
+		r.instanceSpace[instNo] = &Instance{
+			cmds,
+			ballot,
+			PREPARING,
+			&LeaderBookkeeping{proposals, 0, 0, 0}}
+	}
 
 	if r.defaultBallot != ballot {
 		r.bcastPrepare(instNo, ballot, true)
@@ -576,7 +573,7 @@ func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
 	inst := r.instanceSpace[preply.Instance]
 
 	if inst.status != PREPARING {
-		dlog.Printf("Not preparing!")
+		dlog.Printf("Not preparing %d!", preply.Instance)
 		// TODO: should replies for non-current ballots be ignored?
 		// we've moved on -- these are delayed replies, so just ignore
 		return
@@ -588,7 +585,6 @@ func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
 			if inst.ballot > r.defaultBallot {
 				r.defaultBallot = inst.ballot
 			}
-
 			inst.status = PREPARED
 			inst.lb.nacks = 0
 			r.recordInstanceMetadata(r.instanceSpace[preply.Instance])
@@ -596,7 +592,7 @@ func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
 			r.bcastAccept(preply.Instance, inst.ballot, inst.cmds)
 		}
 	} else {
-		dlog.Printf("There is another active leader (",preply.Ballot," > ",r.maxRecvBallot,")")
+		dlog.Printf("There is another active leader (%d,%d)", preply.Ballot, r.maxRecvBallot)
 		// TODO: there is probably another active leader
 		inst.lb.nacks++
 		if preply.Command != nil{
