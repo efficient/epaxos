@@ -257,11 +257,11 @@ func (r *Replica) makeBallot(instance int32) int32 {
 	ret := r.Id
 
 	if r.defaultBallot > ret{
-		ret = r.defaultBallot + 1
+		ret = r.defaultBallot + 10
 	}
 
 	if r.maxRecvBallot > ret{
-		ret = r.maxRecvBallot + 1
+		ret = r.maxRecvBallot + 10
 	}
 
 	return ret
@@ -384,7 +384,12 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	}
 
 	for r.instanceSpace[r.crtInstance] != nil {
-		r.crtInstance++
+		if r.instanceSpace[r.crtInstance].status == COMMITTED {
+			r.crtInstance++
+		}else{
+			r.instanceSpace[r.crtInstance].status = PREPARING
+			break
+		}
 	}
 
 	instNo := r.crtInstance
@@ -573,6 +578,7 @@ func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
 	inst := r.instanceSpace[preply.Instance]
 
 	if inst.status != PREPARING {
+		dlog.Printf("Not preparing!")
 		// TODO: should replies for non-current ballots be ignored?
 		// we've moved on -- these are delayed replies, so just ignore
 		return
