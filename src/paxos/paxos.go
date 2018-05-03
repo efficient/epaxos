@@ -457,6 +457,11 @@ func (r *Replica) handlePrepare(prepare *paxosproto.Prepare) {
 	if prepare.ToInfinity == TRUE && prepare.Ballot > r.defaultBallot {
 		r.defaultBallot = prepare.Ballot
 	}
+
+	if prepare.Ballot> r.maxRecvBallot {
+		r.maxRecvBallot = prepare.Ballot
+	}
+
 }
 
 func (r *Replica) handleAccept(accept *paxosproto.Accept) {
@@ -579,6 +584,7 @@ func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
 			if inst.ballot > r.defaultBallot {
 				r.defaultBallot = inst.ballot
 			}
+
 			inst.status = PREPARED
 			inst.lb.nacks = 0
 			r.recordInstanceMetadata(r.instanceSpace[preply.Instance])
