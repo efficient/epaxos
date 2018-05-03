@@ -420,8 +420,9 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 			cmds,
 			ballot,
 			PREPARING,
-			&LeaderBookkeeping{proposals, 0, 0, 0}}
+			nil}
 	}
+	r.instanceSpace[instNo].lb = &LeaderBookkeeping{proposals, 0, 0, 0}
 
 	if r.defaultBallot != ballot {
 		r.bcastPrepare(instNo, ballot, true)
