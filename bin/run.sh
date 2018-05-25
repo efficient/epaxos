@@ -1,17 +1,16 @@
 #!/bin/bash
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if [ "${TYPE}" == "" ];
-then
+if [ "${TYPE}" == "" ]; then
     echo "usage: define env variables, as listed below
     TYPE = [master,server,client] # type of instance
     MPORT, MADDR # master instance
     MPORT, MADDR, ADDR, SPORT, SERVER_EXTRA_ARGS # server instance
     MPORT, MADDR, NCLIENTS, CLIENT_EXTRA_ARGS # client instance
-    ";
+    "
     exit 0
-fi;
+fi
 
 # Usage of ./bin/master:
 #   -N int
@@ -19,12 +18,11 @@ fi;
 #   -port int
 #     	Port # to listen on. Defaults to 7087 (default 7087)
 
-if [ "${TYPE}" == "master" ];
-then
+if [ "${TYPE}" == "master" ]; then
     args="-port ${MPORT} -N ${NREPLICAS}"
     echo "master mode: ${args}"
-    ${DIR}/master ${args};
-fi;
+    ${DIR}/master ${args}
+fi
 
 # Usage of ./bin/server:
 #   -addr string
@@ -53,19 +51,17 @@ fi;
 #   -thrifty
 #     	Use only as many messages as strictly required for inter-replica communication. (default true)
 
-
-if [ "${TYPE}" == "server" ];
-then
-    args="-addr ${ADDR} -port ${SPORT} -maddr ${MADDR} -mport ${MPORT} ${SERVER_EXTRA_ARGS}"; 
+if [ "${TYPE}" == "server" ]; then
+    args="-addr ${ADDR} -port ${SPORT} -maddr ${MADDR} -mport ${MPORT} ${SERVER_EXTRA_ARGS}"
     echo "server mode: ${args}"
     ${DIR}/server ${args}
-fi;
+fi
 
 # Usage of ./bin/client:
 #   -c int
 #     	Percentage of conflicts. Defaults to 0%
 #   -e	Egalitarian (no leader).
-#   -f	Fast Paxos: send message directly to all replicas. 
+#   -f	Fast Paxos: send message directly to all replicas.
 #   -id string
 #     	the id of the client. Default is RFC 4122 nodeID.
 #   -maddr string
@@ -83,39 +79,35 @@ fi;
 #     	Percentage of updates (writes).  (default 100)
 #   -s	replace read with short scan (100 elements)
 
-
-if [ "${TYPE}" == "client" ];
-then
-    args="-maddr ${MADDR} -mport ${MPORT} ${CLIENT_EXTRA_ARGS}"; 
-    echo "client mode: ${args}" > all_logs
+if [ "${TYPE}" == "client" ]; then
+    args="-maddr ${MADDR} -mport ${MPORT} ${CLIENT_EXTRA_ARGS}"
+    echo "client mode: ${args}" >all_logs
 
     mkdir -p logs/
 
     for i in $(seq 1 ${NCLIENTS}); do
-        ${DIR}/client ${args} > "logs/c_$i.txt" 2>&1 &
+        ${DIR}/client ${args} >"logs/c_$i.txt" 2>&1 &
         #echo "> Client $i of ${NCLIENTS} started!"
     done
 
     started=-1
     while [ ${started} != ${NCLIENTS} ]; do
-        started=$(cat logs/c_*.txt  | grep "Connected" | wc -l)
+        started=$(cat logs/c_*.txt | grep "Connected" | wc -l)
     done
     echo "Connect OK!"
 
     ended=-1
     while [ ${ended} != ${NCLIENTS} ]; do
-        ended=$(cat logs/c_*.txt  | grep "Test took" | wc -l)
+        ended=$(cat logs/c_*.txt | grep "Test took" | wc -l)
         echo "> Ended ${ended} of ${NCLIENTS}!"
         #ls -d logs/* | xargs wc -l
         sleep 10
     done
 
     for i in $(seq 1 ${NCLIENTS}); do
-        cat "logs/c_$i.txt" >> all_logs
+        cat "logs/c_$i.txt" >>all_logs
     done
-    
+
     echo "Will sleep forever"
     while true; do sleep 10000; done
-fi;
-
-
+fi
