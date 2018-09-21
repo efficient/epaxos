@@ -96,6 +96,10 @@ if [ "${TYPE}" == "client" ]; then
     done
     echo "Connect OK!"
 
+    for i in $(seq 1 ${NCLIENTS}); do
+         cat "logs/c_$i.txt" >>all_logs &
+    done
+    
     ended=-1
     while [ ${ended} != ${NCLIENTS} ]; do
         ended=$(cat logs/c_*.txt | grep "Test took" | wc -l)
@@ -104,10 +108,8 @@ if [ "${TYPE}" == "client" ]; then
         sleep 10
     done
 
-    for i in $(seq 1 ${NCLIENTS}); do
-        cat "logs/c_$i.txt" >>all_logs
-    done
-
+    pkill -P $$
+    
     echo "Will sleep forever"
     while true; do sleep 10000; done
 fi
