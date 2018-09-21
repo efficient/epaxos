@@ -97,7 +97,7 @@ if [ "${TYPE}" == "client" ]; then
     echo "Connect OK!"
 
     for i in $(seq 1 ${NCLIENTS}); do
-         cat "logs/c_$i.txt" >>all_logs &
+         tail -f "logs/c_$i.txt" >>all_logs &
     done
     
     ended=-1
