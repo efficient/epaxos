@@ -787,8 +787,10 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	if batchSize > MAX_BATCH {
 		batchSize = MAX_BATCH
 	}
+	r.Mutex.Lock()
 	r.Stats.M["totalBatching"] ++
 	r.Stats.M["totalBatchingSize"] += batchSize
+	r.Mutex.Unlock()
 
 	instNo := r.crtInstance[r.Id]
 	r.crtInstance[r.Id]++
@@ -1016,7 +1018,9 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 	if (r.N <= 3 && !r.Thrifty) || inst.lb.preAcceptOKs > 1 {
 		inst.lb.allEqual = inst.lb.allEqual && equal
 		if !equal {
+			r.Mutex.Lock()
 			r.Stats.M["conflicted"]++
+			r.Mutex.Unlock()
 		}
 	}
 
@@ -1036,7 +1040,9 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 
 	//can we commit on the fast path?
 	if inst.lb.preAcceptOKs >= (r.fastQuorumSize() - 1) && inst.lb.allEqual && allCommitted && isInitialBallot(inst.ballot) {
+		r.Mutex.Lock()
 		r.Stats.M["fast"]++
+		r.Mutex.Unlock()
 		dlog.Printf("Fast path %d.%d, w. deps %d\n", pareply.Replica, pareply.Instance, pareply.Deps)
 		r.InstanceSpace[pareply.Replica][pareply.Instance].Status = epaxosproto.COMMITTED
 		r.updateCommitted(pareply.Replica)
@@ -1058,13 +1064,19 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 		r.sync() //is this necessary here?
 
 		r.bcastCommit(pareply.Replica, pareply.Instance, inst.Cmds, inst.Seq, inst.Deps)
+		r.Mutex.Lock()
 		r.Stats.M["totalCommitTime"]+=int(time.Now().UnixNano()-inst.proposeTime)
+		r.Mutex.Unlock()
 	} else if inst.lb.preAcceptOKs >= r.N/2 {
 		if !allCommitted {
+			r.Mutex.Lock()
 			r.Stats.M["weird"]++
+			r.Mutex.Unlock()
 		}
 		dlog.Printf("Slow path %d.%d\n", pareply.Replica, pareply.Instance)
+		r.Mutex.Lock()
 		r.Stats.M["slow"]++
+		r.Mutex.Unlock()
 		inst.Status = epaxosproto.ACCEPTED
 		r.bcastAccept(pareply.Replica, pareply.Instance, inst.ballot, int32(len(inst.Cmds)), inst.Seq, inst.Deps)
 	} else{
@@ -1187,7 +1199,9 @@ func (r *Replica) handleAcceptReply(areply *epaxosproto.AcceptReply) {
 		r.sync() //is this necessary here?
 
 		r.bcastCommit(areply.Replica, areply.Instance, inst.Cmds, inst.Seq, inst.Deps)
+		r.Mutex.Lock()
 		r.Stats.M["totalCommitTime"]+=int(time.Now().UnixNano()-inst.proposeTime)
+		r.Mutex.Unlock()
 	}else{
 		dlog.Println("Not enough")
 	}
@@ -1419,7 +1433,9 @@ func (r *Replica) handlePrepareReply(preply *epaxosproto.PrepareReply) {
 			preply.Deps,
 			nil, 0, 0, nil, 0}
 		r.bcastCommit(preply.Replica, preply.Instance, inst.Cmds, preply.Seq, preply.Deps)
+		r.Mutex.Lock()
 		r.Stats.M["totalCommitTime"]+=int(time.Now().UnixNano()-inst.proposeTime)
+		r.Mutex.Unlock()
 		//TODO: check if we should send notifications to clients
 		dlog.Println("Already committed")
 		return
