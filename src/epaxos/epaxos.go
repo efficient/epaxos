@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-const MAX_INSTANCE = 2*1024*1024
+const MAX_INSTANCE = 10*1024*1024
 
 const MAX_DEPTH_DEP = 10
 const TRUE = uint8(1)
