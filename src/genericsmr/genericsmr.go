@@ -353,7 +353,9 @@ func (r *Replica) clientListener(conn net.Conn) {
 			break
 
 		case genericsmrproto.STATS:
+			r.Mutex.Lock()
 			b,_ := json.Marshal(r.Stats)
+			r.Mutex.Unlock()
 			writer.Write(b)
 			writer.Flush()
 		}
