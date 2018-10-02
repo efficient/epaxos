@@ -61,7 +61,8 @@ func (b *Parameters) Connect() error {
 
 	master, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", b.masterAddr, b.masterPort))
 	if err != nil {
-		log.Fatalf("Error connecting to master\n")
+		log.Printf("Error connecting to master\n")
+		return err
 	}
 
 	var rlReply *masterproto.GetReplicaListReply
@@ -69,7 +70,8 @@ func (b *Parameters) Connect() error {
 		rlReply = new(masterproto.GetReplicaListReply)
 		err = master.Call("Master.GetReplicaList", new(masterproto.GetReplicaListArgs), rlReply)
 		if err != nil {
-			log.Fatalf("Error making the GetReplicaList RPC")
+			log.Printf("Error making the GetReplicaList RPC")
+			return err
 		}
 		if rlReply.Ready {
 			done = true
