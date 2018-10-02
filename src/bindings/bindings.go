@@ -71,7 +71,6 @@ func (b *Parameters) Connect() error {
 		err = master.Call("Master.GetReplicaList", new(masterproto.GetReplicaListArgs), rlReply)
 		if err != nil {
 			log.Printf("Error making the GetReplicaList RPC")
-			return err
 		}
 		if rlReply.Ready {
 			done = true
