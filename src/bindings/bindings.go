@@ -71,6 +71,7 @@ func (b *Parameters) Connect() error {
 		err = master.Call("Master.GetReplicaList", new(masterproto.GetReplicaListArgs), rlReply)
 		if err != nil {
 			log.Printf("Error making the GetReplicaList RPC")
+			return err
 		}
 		if rlReply.Ready {
 			done = true
@@ -97,6 +98,7 @@ func (b *Parameters) Connect() error {
 			}
 		} else {
 			log.Printf("cannot connect to " + b.replicaLists[i])
+			return err
 		}
 	}
 
@@ -114,7 +116,8 @@ func (b *Parameters) Connect() error {
 	if b.leaderless == false {
 		reply := new(masterproto.GetLeaderReply)
 		if err = master.Call("Master.GetLeader", new(masterproto.GetLeaderArgs), reply); err != nil {
-			log.Fatalf("Error making the GetLeader RPC\n")
+			log.Printf("Error making the GetLeader RPC\n")
+			return err
 		}
 		b.Leader = reply.LeaderId
 		if  b.closestReplica != b.Leader{

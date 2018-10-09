@@ -38,8 +38,15 @@ func main() {
 		log.Fatalf("Conflicts percentage must be between 0 and 100.\n")
 	}
 
-	proxy := bindings.NewParameters(*masterAddr, *masterPort, *verbose, *noLeader, *fast, *localReads)
-	proxy.Connect()
+	var proxy *bindings.Parameters
+	for {
+		proxy = bindings.NewParameters(*masterAddr, *masterPort, *verbose, *noLeader, *fast, *localReads)
+		err := proxy.Connect()
+		if err == nil{
+			break
+		}
+		proxy.Disconnect()
+	}
 
 	if clientId == "" {
 		clientId = uuid.New().String()
