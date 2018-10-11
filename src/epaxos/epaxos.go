@@ -1067,7 +1067,7 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 		r.Mutex.Lock()
 		r.Stats.M["totalCommitTime"]+=int(time.Now().UnixNano()-inst.proposeTime)
 		r.Mutex.Unlock()
-	} else if inst.lb.preAcceptOKs >= r.N/2 {
+	} else if inst.lb.preAcceptOKs >= r.fastQuorumSize() - 1 {
 		if !allCommitted {
 			r.Mutex.Lock()
 			r.Stats.M["weird"]++
