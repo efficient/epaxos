@@ -2,7 +2,7 @@
 
 LOGS=logs
 
-NSERVERS=7
+NSERVERS=5
 NCLIENTS=10
 CMDS=10000
 PSIZE=32
@@ -15,7 +15,7 @@ CLIENT=bin/client
 DIFF_TOOL=diff
 #DIFF_TOOL=merge
 
-failure=3
+failure=1
 
 master() {
     touch ${LOGS}/m.txt
