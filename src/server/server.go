@@ -34,6 +34,7 @@ var lread = flag.Bool("lread", false, "Execute locally read command.")
 var dreply = flag.Bool("dreply", true, "Reply to client only after command has been executed.")
 var beacon = flag.Bool("beacon", false, "Send beacons to other replicas to compare their relative speeds.")
 var durable = flag.Bool("durable", false, "Log to a stable store (i.e., a file in the current dir).")
+var opt_delivery = flag.Bool("opt_delivery", false, "Optimize delivery of commands.")
 
 func main() {
 	flag.Parse()
@@ -62,7 +63,7 @@ func main() {
 
 	if *doEpaxos {
 		log.Println("Starting Egalitarian Paxos replica...")
-		rep := epaxos.NewReplica(replicaId, nodeList, *thrifty, *exec, *lread, *dreply, *beacon, *durable)
+		rep := epaxos.NewReplica(replicaId, nodeList, *thrifty, *exec, *lread, *dreply, *beacon, *durable, *opt_delivery)
 		rpc.Register(rep)
 	} else if *doMencius {
 		log.Println("Starting Mencius replica...")

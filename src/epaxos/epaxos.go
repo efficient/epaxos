@@ -75,6 +75,7 @@ type Replica struct {
 	clientMutex           *sync.Mutex // for synchronizing when sending replies to clients from multiple go-routines
 	instancesToRecover    chan *instanceId
 	IsLeader              bool // does this replica think it is the leader
+	OptDelivery           bool // run optimized delivery or not
 }
 
 type Instance struct {
@@ -121,7 +122,7 @@ type LeaderBookkeeping struct {
 	tpaOKs            int
 }
 
-func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bool, dreply bool, beacon bool, durable bool) *Replica {
+func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bool, dreply bool, beacon bool, durable bool, opt_delivery bool) *Replica {
 	r := &Replica{
 		genericsmr.NewReplica(id, peerAddrList, thrifty, exec, lread, dreply),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
@@ -148,7 +149,8 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bo
 		-1,
 		new(sync.Mutex),
 		make(chan *instanceId, genericsmr.CHAN_BUFFER_SIZE),
-		false}
+		false,
+		opt_delivery}
 
 	r.Beacon = beacon
 	r.Durable = durable
@@ -448,10 +450,14 @@ func (r *Replica) executeCommands() {
 						problemInstance[q] = inst
 						timeout[q] = 0
 					}
-					//if r.InstanceSpace[q][inst] == nil {
-					//	continue
-					//}
-					break // stop at the first problematic instance
+					if r.OptDelivery {
+						continue
+					} else {
+						if r.InstanceSpace[q][inst] == nil {
+							continue
+						}
+						break
+					}
 				}
 				if ok := r.exec.executeCommand(int32(q), inst); ok {
 					executed = true
