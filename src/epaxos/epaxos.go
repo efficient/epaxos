@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-const MAX_INSTANCE = 10*1024*1024
+const MAX_INSTANCE = 10 * 1024 * 1024
 
 const MAX_DEPTH_DEP = 10
 const TRUE = uint8(1)
@@ -64,7 +64,7 @@ type Replica struct {
 	tryPreAcceptReplyRPC  uint8
 	InstanceSpace         [][]*Instance // the space of all instances (used and not yet used)
 	crtInstance           []int32       // highest active instance numbers that this replica knows about
-	CommittedUpTo         []int32     // highest committed instance per replica that this replica knows about
+	CommittedUpTo         []int32       // highest committed instance per replica that this replica knows about
 	ExecedUpTo            []int32       // instance up to which all commands have been executed (including iteslf)
 	exec                  *Exec
 	conflicts             []map[state.Key]int32
@@ -74,13 +74,13 @@ type Replica struct {
 	latestCPInstance      int32
 	clientMutex           *sync.Mutex // for synchronizing when sending replies to clients from multiple go-routines
 	instancesToRecover    chan *instanceId
-	IsLeader              bool        // does this replica think it is the leader
+	IsLeader              bool // does this replica think it is the leader
 }
 
 type Instance struct {
 	Coordinator    int32
 	Cmds           []state.Command
- 	ballot         int32
+	ballot         int32
 	Status         int8
 	Seq            int32
 	Deps           []int32
@@ -194,7 +194,7 @@ func (r *Replica) recordInstanceMetadata(inst *Instance) {
 		return
 	}
 
-	b := make([]byte, 9 + r.N * 4)
+	b := make([]byte, 9+r.N*4)
 	binary.LittleEndian.PutUint32(b[0:4], uint32(inst.ballot))
 	b[4] = byte(inst.Status)
 	binary.LittleEndian.PutUint32(b[5:9], uint32(inst.Seq))
@@ -434,11 +434,11 @@ func (r *Replica) executeCommands() {
 					}
 					continue
 				}
-				if r.InstanceSpace[q][inst] == nil || r.InstanceSpace[q][inst].Status != epaxosproto.COMMITTED{
+				if r.InstanceSpace[q][inst] == nil || r.InstanceSpace[q][inst].Status != epaxosproto.COMMITTED {
 					if inst == problemInstance[q] {
 						timeout[q] += SLEEP_TIME_NS
 						if timeout[q] >= COMMIT_GRACE_PERIOD {
-							if r.IsLeader || timeout[q] >= COMMIT_GRACE_PERIOD * uint64(r.Id+1){
+							if r.IsLeader || timeout[q] >= COMMIT_GRACE_PERIOD*uint64(r.Id+1) {
 								dlog.Printf("Recovery for %d.%d", q, inst)
 								r.instancesToRecover <- &instanceId{int32(q), inst}
 								timeout[q] = 0
@@ -533,7 +533,7 @@ func (r *Replica) bcastPrepare(replica int32, instance int32, ballot int32) {
 		if !r.Alive[q] {
 			continue
 		}
-		dlog.Printf("Sending Prepare %d.%d w. ballot %d to %d\n",replica, instance, ballot, q)
+		dlog.Printf("Sending Prepare %d.%d w. ballot %d to %d\n", replica, instance, ballot, q)
 		r.SendMsg(q, r.prepareRPC, args)
 		sent++
 	}
@@ -635,7 +635,6 @@ func (r *Replica) bcastAccept(replica int32, instance int32, ballot int32, count
 	}
 }
 
-
 func (r *Replica) bcastCommit(replica int32, instance int32, cmds []state.Command, seq int32, deps []int32) {
 	defer func() {
 		if err := recover(); err != nil {
@@ -686,8 +685,8 @@ func (r *Replica) updateConflicts(cmds []state.Command, replica int32, instance 
 				r.conflicts[replica][cmds[i].K] = instance
 			}
 		} else {
-            r.conflicts[replica][cmds[i].K] = instance
-        }
+			r.conflicts[replica][cmds[i].K] = instance
+		}
 		if s, present := r.maxSeqPerKey[cmds[i].K]; present {
 			if s < seq {
 				r.maxSeqPerKey[cmds[i].K] = seq
@@ -788,14 +787,14 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 		batchSize = MAX_BATCH
 	}
 	r.Mutex.Lock()
-	r.Stats.M["totalBatching"] ++
+	r.Stats.M["totalBatching"]++
 	r.Stats.M["totalBatchingSize"] += batchSize
 	r.Mutex.Unlock()
 
 	instNo := r.crtInstance[r.Id]
 	r.crtInstance[r.Id]++
 
-	dlog.Printf("Starting %d.%d w. batching %d\n", r.Id,instNo, batchSize)
+	dlog.Printf("Starting %d.%d w. batching %d\n", r.Id, instNo, batchSize)
 
 	cmds := make([]state.Command, batchSize)
 	proposals := make([]*genericsmr.Propose, batchSize)
@@ -835,7 +834,7 @@ func (r *Replica) startPhase1(replica int32, instance int32, ballot int32, propo
 		deps,
 		&LeaderBookkeeping{proposals, 0, 0, true, 0, 0, 0, deps, comDeps, nil, false, false, nil, 0}, 0, 0,
 		nil,
-	time.Now().UnixNano()}
+		time.Now().UnixNano()}
 
 	r.updateConflicts(cmds, r.Id, instance, seq)
 
@@ -875,7 +874,7 @@ func (r *Replica) startPhase1(replica int32, instance int32, ballot int32, propo
 			0,
 			0,
 			nil,
-		0}
+			0}
 
 		r.latestCPReplica = r.Id
 		r.latestCPInstance = instance
@@ -923,7 +922,7 @@ func (r *Replica) handlePreAccept(preAccept *epaxosproto.PreAccept) {
 
 	if inst != nil {
 		if preAccept.Ballot < inst.ballot {
-			dlog.Printf("I say no w. seq=%d, deps=%d, committedUpTo=%d\n",inst.Seq, inst.Deps, r.CommittedUpTo)
+			dlog.Printf("I say no w. seq=%d, deps=%d, committedUpTo=%d\n", inst.Seq, inst.Deps, r.CommittedUpTo)
 			//r.replyPreAccept(preAccept.LeaderId,
 			//	&epaxosproto.PreAcceptReply{
 			//		preAccept.Replica,
@@ -952,7 +951,7 @@ func (r *Replica) handlePreAccept(preAccept *epaxosproto.PreAccept) {
 			deps,
 			nil, 0, 0,
 			nil,
-		0}
+			0}
 	}
 
 	r.updateConflicts(preAccept.Command, preAccept.Replica, preAccept.Instance, preAccept.Seq)
@@ -1039,7 +1038,7 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 	//}
 
 	//can we commit on the fast path?
-	if inst.lb.preAcceptOKs >= (r.fastQuorumSize() - 1) && inst.lb.allEqual && allCommitted && isInitialBallot(inst.ballot) {
+	if inst.lb.preAcceptOKs >= (r.fastQuorumSize()-1) && inst.lb.allEqual && allCommitted && isInitialBallot(inst.ballot) {
 		r.Mutex.Lock()
 		r.Stats.M["fast"]++
 		r.Mutex.Unlock()
@@ -1065,9 +1064,9 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 
 		r.bcastCommit(pareply.Replica, pareply.Instance, inst.Cmds, inst.Seq, inst.Deps)
 		r.Mutex.Lock()
-		r.Stats.M["totalCommitTime"]+=int(time.Now().UnixNano()-inst.proposeTime)
+		r.Stats.M["totalCommitTime"] += int(time.Now().UnixNano() - inst.proposeTime)
 		r.Mutex.Unlock()
-	} else if inst.lb.preAcceptOKs >= r.fastQuorumSize() - 1 {
+	} else if inst.lb.preAcceptOKs >= r.fastQuorumSize()-1 {
 		if !allCommitted {
 			r.Mutex.Lock()
 			r.Stats.M["weird"]++
@@ -1079,12 +1078,11 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 		r.Mutex.Unlock()
 		inst.Status = epaxosproto.ACCEPTED
 		r.bcastAccept(pareply.Replica, pareply.Instance, inst.ballot, int32(len(inst.Cmds)), inst.Seq, inst.Deps)
-	} else{
+	} else {
 		dlog.Printf("Nothing to do\n")
 	}
 	//TODO: take the slow path if messages are slow to arrive
 }
-
 
 /**********************************************************************
 
@@ -1200,9 +1198,9 @@ func (r *Replica) handleAcceptReply(areply *epaxosproto.AcceptReply) {
 
 		r.bcastCommit(areply.Replica, areply.Instance, inst.Cmds, inst.Seq, inst.Deps)
 		r.Mutex.Lock()
-		r.Stats.M["totalCommitTime"]+=int(time.Now().UnixNano()-inst.proposeTime)
+		r.Stats.M["totalCommitTime"] += int(time.Now().UnixNano() - inst.proposeTime)
 		r.Mutex.Unlock()
-	}else{
+	} else {
 		dlog.Println("Not enough")
 	}
 }
@@ -1229,7 +1227,7 @@ func (r *Replica) handleCommit(commit *epaxosproto.Commit) {
 			//someone committed a NO-OP, but we have proposals for this instance
 			//try in a different instance
 			for _, p := range inst.lb.clientProposals {
-				dlog.Printf("Re-trying %d\n",p.Command)
+				dlog.Printf("Re-trying %d\n", p.Command)
 				r.ProposeChan <- p
 			}
 			inst.lb = nil
@@ -1321,7 +1319,7 @@ func (r *Replica) BeTheLeader(args *genericsmrproto.BeTheLeaderArgs, reply *gene
 	r.Mutex.Lock()
 	r.IsLeader = true
 	log.Println("I am the leader")
-	time.Sleep(5*time.Second) // wait that the connection is actually lost
+	time.Sleep(5 * time.Second) // wait that the connection is actually lost
 	r.Mutex.Unlock()
 	return nil
 }
@@ -1333,7 +1331,7 @@ func (r *Replica) startRecoveryForInstance(replica int32, instance int32) {
 
 	if r.InstanceSpace[replica][instance] == nil {
 		dlog.Println("Creating instance")
-		r.InstanceSpace[replica][instance] = &Instance{replica,nil, 0, epaxosproto.NONE, 0, nildeps, nil, 0, 0, nil, 0}
+		r.InstanceSpace[replica][instance] = &Instance{replica, nil, 0, epaxosproto.NONE, 0, nildeps, nil, 0, 0, nil, 0}
 	}
 
 	inst := r.InstanceSpace[replica][instance]
@@ -1388,7 +1386,7 @@ func (r *Replica) handlePrepare(prepare *epaxosproto.Prepare) {
 		} else {
 			inst.ballot = prepare.Ballot
 		}
-		preply = &epaxosproto.PrepareReply{   // FIXME not inline w. TLA spec. (prev_ballot is missing)
+		preply = &epaxosproto.PrepareReply{ // FIXME not inline w. TLA spec. (prev_ballot is missing)
 			r.Id,
 			prepare.Replica,
 			prepare.Instance,
@@ -1434,7 +1432,7 @@ func (r *Replica) handlePrepareReply(preply *epaxosproto.PrepareReply) {
 			nil, 0, 0, nil, 0}
 		r.bcastCommit(preply.Replica, preply.Instance, inst.Cmds, preply.Seq, preply.Deps)
 		r.Mutex.Lock()
-		r.Stats.M["totalCommitTime"]+=int(time.Now().UnixNano()-inst.proposeTime)
+		r.Stats.M["totalCommitTime"] += int(time.Now().UnixNano() - inst.proposeTime)
 		r.Mutex.Unlock()
 		//TODO: check if we should send notifications to clients
 		dlog.Println("Already committed")
@@ -1643,7 +1641,7 @@ func (r *Replica) findPreAcceptConflicts(cmds []state.Command, replica int32, in
 func (r *Replica) handleTryPreAcceptReply(tpar *epaxosproto.TryPreAcceptReply) {
 	inst := r.InstanceSpace[tpar.Replica][tpar.Instance]
 	if inst == nil || inst.lb == nil || !inst.lb.tryingToPreAccept || inst.lb.recoveryInst == nil {
-		dlog.Printf("Nothing to do %d.%d\n",tpar.Replica,tpar.Instance)
+		dlog.Printf("Nothing to do %d.%d\n", tpar.Replica, tpar.Instance)
 		return
 	}
 
@@ -1667,14 +1665,14 @@ func (r *Replica) handleTryPreAcceptReply(tpar *epaxosproto.TryPreAcceptReply) {
 		inst.lb.nacks++
 		if tpar.Ballot > inst.ballot {
 			//TODO: retry with higher ballot
-			dlog.Printf("Retry %d.%d\n",tpar.Replica,tpar.Instance)
+			dlog.Printf("Retry %d.%d\n", tpar.Replica, tpar.Instance)
 			return
 		}
 		inst.lb.tpaOKs++
 		if tpar.ConflictReplica == tpar.Replica && tpar.ConflictInstance == tpar.Instance {
 			//TODO: re-run prepare
 			inst.lb.tryingToPreAccept = false
-			dlog.Printf("Re-run %d.%d\n",tpar.Replica,tpar.Instance)
+			dlog.Printf("Re-run %d.%d\n", tpar.Replica, tpar.Instance)
 			return
 		}
 		inst.lb.possibleQuorum[tpar.AcceptorId] = false
@@ -1730,6 +1728,6 @@ func deferredByInstance(q int32, i int32) (bool, int32, int32) {
 	return true, dq, di
 }
 
-func (r *Replica) fastQuorumSize() (int){
+func (r *Replica) fastQuorumSize() int {
 	return r.N/2 + (r.N/2+1)/2
 }

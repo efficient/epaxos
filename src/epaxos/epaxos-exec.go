@@ -2,11 +2,11 @@ package epaxos
 
 import (
 	//    "state"
+	"dlog"
 	"epaxosproto"
 	"genericsmrproto"
 	"sort"
 	"state"
-	"dlog"
 )
 
 const (
@@ -33,7 +33,7 @@ func (e *Exec) executeCommand(replica int32, instance int32) bool {
 		return true
 	}
 	if inst.Status != epaxosproto.COMMITTED {
-		dlog.Printf("Not committed instance %d.%d\n",replica,instance)
+		dlog.Printf("Not committed instance %d.%d\n", replica, instance)
 		return false
 	}
 
@@ -81,12 +81,12 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 		inst := v.Deps[q]
 		for i := e.r.ExecedUpTo[q] + 1; i <= inst; i++ {
 			if e.r.InstanceSpace[q][i] == nil {
-				dlog.Printf("Null instance %d.%d\n",q,i)
+				dlog.Printf("Null instance %d.%d\n", q, i)
 				return false
 			}
 
 			if e.r.InstanceSpace[q][i].Cmds == nil {
-				dlog.Printf("Null command %d.%d\n",q,i)
+				dlog.Printf("Null command %d.%d\n", q, i)
 				return false
 			}
 
@@ -95,7 +95,7 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 			}
 
 			for e.r.InstanceSpace[q][i].Status != epaxosproto.COMMITTED {
-				dlog.Printf("Not committed instance %d.%d\n",q,i)
+				dlog.Printf("Not committed instance %d.%d\n", q, i)
 				return false
 			}
 
@@ -124,7 +124,7 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 		sort.Sort(nodeArray(list))
 		for _, w := range list {
 			for idx := 0; idx < len(w.Cmds); idx++ {
-				dlog.Printf("Executing "+w.Cmds[idx].String()+" (%d,%d)[%d], deps=%d, scc_size=%d",w.Coordinator,w.Seq,idx,w.Deps,len(list))
+				dlog.Printf("Executing "+w.Cmds[idx].String()+" (%d,%d)[%d], deps=%d, scc_size=%d", w.Coordinator, w.Seq, idx, w.Deps, len(list))
 				if w.Cmds[idx].Op == state.NONE {
 					dlog.Printf("Skipping no-op command")
 				} else if e.r.Dreply && w.lb != nil && w.lb.clientProposals != nil {
@@ -138,7 +138,7 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 							w.lb.clientProposals[idx].Timestamp},
 						w.lb.clientProposals[idx].Reply,
 						w.lb.clientProposals[idx].Mutex)
-				} else if w.Cmds[idx].Op == state.PUT{
+				} else if w.Cmds[idx].Op == state.PUT {
 					w.Cmds[idx].Execute(e.r.State)
 				}
 			}
