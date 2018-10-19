@@ -78,7 +78,10 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 	}
 
 	for q := int32(0); q < int32(e.r.N); q++ {
-		inst := v.Deps[q]
+		i := v.Deps[q]
+		if i == -1 {
+			i = 0
+		}
 		// for i := e.r.ExecedUpTo[q] + 1; i <= inst; i++ { // it's enough to check the highest dep
 		if e.r.InstanceSpace[q][i] == nil {
 			dlog.Printf("Null instance %d.%d\n", q, i)
