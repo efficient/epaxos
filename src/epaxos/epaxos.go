@@ -1020,7 +1020,9 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 
 	var equal bool
 	inst.Seq, inst.Deps, equal = r.mergeAttributes(inst.Seq, inst.Deps, pareply.Seq, pareply.Deps)
-	if (r.N <= 3 && !r.Thrifty) || inst.lb.preAcceptOKs > 1 {
+	if r.N <= 3 && !r.Thrifty {
+		// no need to check for equality
+	} else {
 		inst.lb.allEqual = inst.lb.allEqual && equal
 		if !equal {
 			r.Mutex.Lock()
