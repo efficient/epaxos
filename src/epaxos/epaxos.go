@@ -1032,18 +1032,18 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 	}
 
 	allCommitted := true
-	//// FIXME r.N \leq 7 (following section 4.4 in SOSP)
-	//for q := 0; q < r.N; q++ {
-	//	if inst.lb.committedDeps[q] < pareply.CommittedDeps[q] {
-	//		inst.lb.committedDeps[q] = pareply.CommittedDeps[q]
-	//	}
-	//	if inst.lb.committedDeps[q] < r.CommittedUpTo[q] {
-	//		inst.lb.committedDeps[q] = r.CommittedUpTo[q]
-	//	}
-	//	if inst.lb.committedDeps[q] < inst.Deps[q] {
-	//		allCommitted = false
-	//	}
-	//}
+	// FIXME r.N \leq 7 (following section 4.4 in SOSP)
+	for q := 0; q < r.N; q++ {
+		if inst.lb.committedDeps[q] < pareply.CommittedDeps[q] {
+			inst.lb.committedDeps[q] = pareply.CommittedDeps[q]
+		}
+		if inst.lb.committedDeps[q] < r.CommittedUpTo[q] {
+			inst.lb.committedDeps[q] = r.CommittedUpTo[q]
+		}
+		if inst.lb.committedDeps[q] < inst.Deps[q] {
+			allCommitted = false
+		}
+	}
 
 	//can we commit on the fast path?
 	if inst.lb.preAcceptOKs >= (r.fastQuorumSize()-1) && inst.lb.allEqual && allCommitted && isInitialBallot(inst.ballot) {
