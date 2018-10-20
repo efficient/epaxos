@@ -75,7 +75,6 @@ type Replica struct {
 	clientMutex           *sync.Mutex // for synchronizing when sending replies to clients from multiple go-routines
 	instancesToRecover    chan *instanceId
 	IsLeader              bool // does this replica think it is the leader
-	OptDelivery           bool // run optimized delivery or not
 }
 
 type Instance struct {
@@ -122,7 +121,7 @@ type LeaderBookkeeping struct {
 	tpaOKs            int
 }
 
-func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bool, dreply bool, beacon bool, durable bool, opt_delivery bool) *Replica {
+func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bool, dreply bool, beacon bool, durable bool) *Replica {
 	r := &Replica{
 		genericsmr.NewReplica(id, peerAddrList, thrifty, exec, lread, dreply),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
@@ -149,8 +148,7 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bo
 		-1,
 		new(sync.Mutex),
 		make(chan *instanceId, genericsmr.CHAN_BUFFER_SIZE),
-		false,
-		opt_delivery}
+		false}
 
 	r.Beacon = beacon
 	r.Durable = durable
@@ -450,14 +448,10 @@ func (r *Replica) executeCommands() {
 						problemInstance[q] = inst
 						timeout[q] = 0
 					}
-					if r.OptDelivery {
+					if r.InstanceSpace[q][inst] == nil {
 						continue
-					} else {
-						if r.InstanceSpace[q][inst] == nil {
-							continue
-						}
-						break
 					}
+					break
 				}
 				if ok := r.exec.executeCommand(int32(q), inst); ok {
 					executed = true
@@ -1032,16 +1026,18 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 	}
 
 	allCommitted := true
-	// FIXME r.N \leq 7 (following section 4.4 in SOSP)
-	for q := 0; q < r.N; q++ {
-		if inst.lb.committedDeps[q] < pareply.CommittedDeps[q] {
-			inst.lb.committedDeps[q] = pareply.CommittedDeps[q]
-		}
-		if inst.lb.committedDeps[q] < r.CommittedUpTo[q] {
-			inst.lb.committedDeps[q] = r.CommittedUpTo[q]
-		}
-		if inst.lb.committedDeps[q] < inst.Deps[q] {
-			allCommitted = false
+	// (following section 4.4 in SOSP)
+	if r.N > 7 {
+		for q := 0; q < r.N; q++ {
+			if inst.lb.committedDeps[q] < pareply.CommittedDeps[q] {
+				inst.lb.committedDeps[q] = pareply.CommittedDeps[q]
+			}
+			if inst.lb.committedDeps[q] < r.CommittedUpTo[q] {
+				inst.lb.committedDeps[q] = r.CommittedUpTo[q]
+			}
+			if inst.lb.committedDeps[q] < inst.Deps[q] {
+				allCommitted = false
+			}
 		}
 	}
 

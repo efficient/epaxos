@@ -78,45 +78,42 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 	}
 
 	for q := int32(0); q < int32(e.r.N); q++ {
-		i := v.Deps[q]
-		if i == -1 {
-			i = 0
-		}
-		// for i := e.r.ExecedUpTo[q] + 1; i <= inst; i++ { // it's enough to check the highest dep
-		if e.r.InstanceSpace[q][i] == nil {
-			dlog.Printf("Null instance %d.%d\n", q, i)
-			return false
-		}
-
-		if e.r.InstanceSpace[q][i].Cmds == nil {
-			dlog.Printf("Null command %d.%d\n", q, i)
-			return false
-		}
-
-		if e.r.InstanceSpace[q][i].Status == epaxosproto.EXECUTED {
-			continue
-		}
-
-		for e.r.InstanceSpace[q][i].Status != epaxosproto.COMMITTED {
-			dlog.Printf("Not committed instance %d.%d\n", q, i)
-			return false
-		}
-
-		w := e.r.InstanceSpace[q][i]
-
-		if w.Index == 0 {
-			if !e.strongconnect(w, index) {
+		inst := v.Deps[q]
+		for i := e.r.ExecedUpTo[q] + 1; i <= inst; i++ {
+			if e.r.InstanceSpace[q][i] == nil {
+				dlog.Printf("Null instance %d.%d\n", q, i)
 				return false
 			}
-			if w.Lowlink < v.Lowlink {
-				v.Lowlink = w.Lowlink
+
+			if e.r.InstanceSpace[q][i].Cmds == nil {
+				dlog.Printf("Null command %d.%d\n", q, i)
+				return false
 			}
-		} else if e.inStack(w) {
-			if w.Index < v.Lowlink {
-				v.Lowlink = w.Index
+
+			if e.r.InstanceSpace[q][i].Status == epaxosproto.EXECUTED {
+				continue
+			}
+
+			for e.r.InstanceSpace[q][i].Status != epaxosproto.COMMITTED {
+				dlog.Printf("Not committed instance %d.%d\n", q, i)
+				return false
+			}
+
+			w := e.r.InstanceSpace[q][i]
+
+			if w.Index == 0 {
+				if !e.strongconnect(w, index) {
+					return false
+				}
+				if w.Lowlink < v.Lowlink {
+					v.Lowlink = w.Lowlink
+				}
+			} else if e.inStack(w) {
+				if w.Index < v.Lowlink {
+					v.Lowlink = w.Index
+				}
 			}
 		}
-		// }
 	}
 
 	if v.Lowlink == v.Index {
