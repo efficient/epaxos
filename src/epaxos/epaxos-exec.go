@@ -108,7 +108,7 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 				if w.Lowlink < v.Lowlink {
 					v.Lowlink = w.Lowlink
 				}
-			} else { //if e.inStack(w)  //<- probably unnecessary condition, saves a linear search
+			} else if e.inStack(w) {
 				if w.Index < v.Lowlink {
 					v.Lowlink = w.Index
 				}

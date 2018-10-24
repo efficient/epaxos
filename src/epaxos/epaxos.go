@@ -448,10 +448,10 @@ func (r *Replica) executeCommands() {
 						problemInstance[q] = inst
 						timeout[q] = 0
 					}
-					//if r.InstanceSpace[q][inst] == nil {
-					//	continue
-					//}
-					break // stop at the first problematic instance
+					// if r.InstanceSpace[q][inst] == nil {
+					// 	continue
+					// }
+					break
 				}
 				if ok := r.exec.executeCommand(int32(q), inst); ok {
 					executed = true
@@ -1014,7 +1014,9 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 
 	var equal bool
 	inst.Seq, inst.Deps, equal = r.mergeAttributes(inst.Seq, inst.Deps, pareply.Seq, pareply.Deps)
-	if (r.N <= 3 && !r.Thrifty) || inst.lb.preAcceptOKs > 1 {
+	if r.N <= 3 && !r.Thrifty {
+		// no need to check for equality
+	} else {
 		inst.lb.allEqual = inst.lb.allEqual && equal
 		if !equal {
 			r.Mutex.Lock()
@@ -1024,21 +1026,25 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 	}
 
 	allCommitted := true
-	//// FIXME r.N \leq 7 (following section 4.4 in SOSP)
-	//for q := 0; q < r.N; q++ {
-	//	if inst.lb.committedDeps[q] < pareply.CommittedDeps[q] {
-	//		inst.lb.committedDeps[q] = pareply.CommittedDeps[q]
-	//	}
-	//	if inst.lb.committedDeps[q] < r.CommittedUpTo[q] {
-	//		inst.lb.committedDeps[q] = r.CommittedUpTo[q]
-	//	}
-	//	if inst.lb.committedDeps[q] < inst.Deps[q] {
-	//		allCommitted = false
-	//	}
-	//}
+	// (following section 4.4 in SOSP)
+	if r.N > 7 {
+		for q := 0; q < r.N; q++ {
+			if inst.lb.committedDeps[q] < pareply.CommittedDeps[q] {
+				inst.lb.committedDeps[q] = pareply.CommittedDeps[q]
+			}
+			if inst.lb.committedDeps[q] < r.CommittedUpTo[q] {
+				inst.lb.committedDeps[q] = r.CommittedUpTo[q]
+			}
+			if inst.lb.committedDeps[q] < inst.Deps[q] {
+				allCommitted = false
+			}
+		}
+	}
+
+	precondition := inst.lb.allEqual && allCommitted && isInitialBallot(inst.ballot)
 
 	//can we commit on the fast path?
-	if inst.lb.preAcceptOKs >= (r.fastQuorumSize()-1) && inst.lb.allEqual && allCommitted && isInitialBallot(inst.ballot) {
+	if inst.lb.preAcceptOKs >= (r.fastQuorumSize()-1) && precondition {
 		r.Mutex.Lock()
 		r.Stats.M["fast"]++
 		r.Mutex.Unlock()
@@ -1066,7 +1072,7 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 		r.Mutex.Lock()
 		r.Stats.M["totalCommitTime"] += int(time.Now().UnixNano() - inst.proposeTime)
 		r.Mutex.Unlock()
-	} else if inst.lb.preAcceptOKs >= r.fastQuorumSize()-1 {
+	} else if inst.lb.preAcceptOKs >= r.N/2 && !precondition {
 		if !allCommitted {
 			r.Mutex.Lock()
 			r.Stats.M["weird"]++
