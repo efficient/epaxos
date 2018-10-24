@@ -448,9 +448,9 @@ func (r *Replica) executeCommands() {
 						problemInstance[q] = inst
 						timeout[q] = 0
 					}
-					if r.InstanceSpace[q][inst] == nil {
-						continue
-					}
+					// if r.InstanceSpace[q][inst] == nil {
+					// 	continue
+					// }
 					break
 				}
 				if ok := r.exec.executeCommand(int32(q), inst); ok {
