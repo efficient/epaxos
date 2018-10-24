@@ -1041,8 +1041,10 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 		}
 	}
 
+	precondition := inst.lb.allEqual && allCommitted && isInitialBallot(inst.ballot)
+
 	//can we commit on the fast path?
-	if inst.lb.preAcceptOKs >= (r.fastQuorumSize()-1) && inst.lb.allEqual && allCommitted && isInitialBallot(inst.ballot) {
+	if inst.lb.preAcceptOKs >= (r.fastQuorumSize()-1) && precondition {
 		r.Mutex.Lock()
 		r.Stats.M["fast"]++
 		r.Mutex.Unlock()
@@ -1070,7 +1072,7 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 		r.Mutex.Lock()
 		r.Stats.M["totalCommitTime"] += int(time.Now().UnixNano() - inst.proposeTime)
 		r.Mutex.Unlock()
-	} else if inst.lb.preAcceptOKs >= r.fastQuorumSize()-1 {
+	} else if inst.lb.preAcceptOKs >= r.N/2 && !precondition {
 		if !allCommitted {
 			r.Mutex.Lock()
 			r.Stats.M["weird"]++
