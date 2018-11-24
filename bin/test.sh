@@ -2,9 +2,9 @@
 
 LOGS=logs
 
-NSERVERS=5
-NCLIENTS=10
-CMDS=10000
+NSERVERS=11
+NCLIENTS=30
+CMDS=10000 # 500k total ~ 5min
 PSIZE=32
 TOTAL_OPS=$((NCLIENTS * CMDS))
 
@@ -15,7 +15,7 @@ CLIENT=bin/client
 DIFF_TOOL=diff
 #DIFF_TOOL=merge
 
-failure=1
+failure=5
 
 master() {
     touch ${LOGS}/m.txt
@@ -47,7 +47,7 @@ clients() {
     for i in $(seq 1 $NCLIENTS); do
         ${CLIENT} -v \
             -q ${CMDS} \
-            -w 50 \
+            -w 100 \
             -c 100 \
             -l \
             -psize ${PSIZE} >"${LOGS}/c_$i.txt" 2>&1 &
@@ -60,7 +60,7 @@ clients() {
         if ((${failure} > 0)); then
             sleep 20
             leader=$(grep "new leader" ${LOGS}/m.txt | tail -n 1 | awk '{print $4}')
-            port=$(grep "node ${leader}" ${LOGS}/m.txt | sed -n 's/.*\(:.*\]\).*/\1/p' | sed 's/[]:]//g')
+            port=$(grep "node ${leader} \[" ${LOGS}/m.txt | sed -n 's/.*\(:.*\]\).*/\1/p' | sed 's/[]:]//g')
             pid=$(ps -ef | grep "bin/server" | grep "${port}" | awk '{print $2}')
             echo ">>>>> Injecting failure... (${leader}, ${port}, ${pid})"
             kill -9 ${pid}
