@@ -17,13 +17,13 @@ type Prepare struct {
 	LeaderId   int32
 	Instance   int32
 	Ballot     int32
-	ToInfinity uint8
 }
 
 type PrepareReply struct {
 	Instance int32
 	OK       uint8
 	Ballot   int32
+	LBallot  int32
 	Command  []state.Command
 }
 
