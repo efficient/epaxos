@@ -428,26 +428,24 @@ func (r *Replica) handlePrepare(prepare *paxosproto.Prepare) {
 	inst := r.instanceSpace[prepare.Instance]
 	var preply *paxosproto.PrepareReply
 
-	ok := TRUE
+	if prepare.Ballot> r.maxRecvBallot {
+		r.maxRecvBallot = prepare.Ballot
+	}
+
 	if r.currentBallot > prepare.Ballot {
 		dlog.Printf("Cannot join ballot %d < %d",prepare.Ballot, r.currentBallot)
-		ok = FALSE
 	} else if r.currentBallot < prepare.Ballot {
 		dlog.Printf("Joining ballot %d ",prepare.Ballot)
 		r.currentBallot = prepare.Ballot
 	}
 
 	if inst == nil {
-		preply = &paxosproto.PrepareReply{prepare.Instance, ok, r.currentBallot, 0, nil}
+		preply = &paxosproto.PrepareReply{prepare.Instance, r.currentBallot, 0, nil}
 	} else {
-		preply = &paxosproto.PrepareReply{prepare.Instance, ok, r.currentBallot, inst.ballot, inst.cmds}
+		preply = &paxosproto.PrepareReply{prepare.Instance,  r.currentBallot, inst.ballot, inst.cmds}
 	}
 
 	r.replyPrepare(prepare.LeaderId, preply)
-
-	if prepare.Ballot> r.maxRecvBallot {
-		r.maxRecvBallot = prepare.Ballot
-	}
 
 }
 
@@ -455,12 +453,16 @@ func (r *Replica) handleAccept(accept *paxosproto.Accept) {
 	inst := r.instanceSpace[accept.Instance]
 	var areply *paxosproto.AcceptReply
 
+	if accept.Ballot > r.maxRecvBallot {
+		r.maxRecvBallot = areply.Ballot
+	}
+
 	if accept.Ballot != r.currentBallot {
 		dlog.Printf("Accept msg not for current ballot %d < %d\n", accept.Ballot, r.currentBallot)
-		areply = &paxosproto.AcceptReply{accept.Instance, FALSE, r.currentBallot}
+		areply = &paxosproto.AcceptReply{accept.Instance, r.currentBallot}
 	} else if inst != nil && inst.status == COMMITTED {
 		dlog.Printf("Already committed instance %d\n", accept.Instance)
-		areply = &paxosproto.AcceptReply{accept.Instance, TRUE, r.currentBallot}
+		areply = &paxosproto.AcceptReply{accept.Instance, r.currentBallot}
 	} else {
 		if inst == nil {
 			r.instanceSpace[accept.Instance] = &Instance{
@@ -468,12 +470,12 @@ func (r *Replica) handleAccept(accept *paxosproto.Accept) {
 				r.currentBallot,
 				ACCEPTED,
 				nil}
-			areply = &paxosproto.AcceptReply{accept.Instance, TRUE, r.currentBallot}
+			areply = &paxosproto.AcceptReply{accept.Instance, r.currentBallot}
 		} else {
 			inst.cmds = accept.Command
 			inst.ballot = r.currentBallot
 			inst.status = ACCEPTED
-			areply = &paxosproto.AcceptReply{accept.Instance, TRUE, r.currentBallot}
+			areply = &paxosproto.AcceptReply{accept.Instance, r.currentBallot}
 		}
 		r.recordInstanceMetadata(r.instanceSpace[accept.Instance])
 		r.recordCommands(accept.Command)
@@ -482,9 +484,6 @@ func (r *Replica) handleAccept(accept *paxosproto.Accept) {
 
 	r.replyAccept(accept.LeaderId, areply)
 
-	if accept.Ballot > r.maxRecvBallot {
-		r.maxRecvBallot = areply.Ballot
-	}
 }
 
 func (r *Replica) handleCommit(commit *paxosproto.Commit) {
@@ -535,9 +534,8 @@ func (r *Replica) handleCommitShort(commit *paxosproto.CommitShort) {
 func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
 	inst := r.instanceSpace[preply.Instance]
 
-	if preply.Command != nil && preply.LBallot > inst.ballot {
-		inst.ballot = preply.LBallot
-		inst.cmds = preply.Command
+	if preply.Ballot > r.maxRecvBallot {
+		r.maxRecvBallot = preply.Ballot
 	}
 
 	if inst.status != PREPARING {
@@ -546,8 +544,8 @@ func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
 	}
 
 	if preply.Ballot != r.lastTriedBallot{
-		dlog.Printf("Invalid ballot %d != %d", preply.Ballot, r.lastTriedBallot)
-		return
+		dlog.Printf("There is another active leader (%d,%d) \n",preply.Ballot, r.lastTriedBallot)
+		inst.lb.nacks++
 	}
 
 	if preply.Command != nil && preply.LBallot > inst.lb.ballot {
@@ -555,74 +553,60 @@ func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
 		inst.lb.cmds = preply.Command
 	}
 
-	if preply.OK == TRUE {
-		inst.lb.prepareOKs++
-		if inst.lb.prepareOKs+1 > r.N>>1 {
-			if r.lastTriedBallot > r.currentBallot {
-				r.currentBallot = r.lastTriedBallot
-			}
-			inst.status = PREPARED
-			inst.lb.nacks = 0
-			r.recordInstanceMetadata(r.instanceSpace[preply.Instance])
-			r.sync()
-			r.bcastAccept(preply.Instance, inst.ballot, inst.cmds)
+	inst.lb.prepareOKs++
+	if inst.lb.prepareOKs+1 > r.N>>1 {
+		if r.lastTriedBallot > r.currentBallot {
+			r.currentBallot = r.lastTriedBallot
 		}
-	} else {
-		dlog.Printf("There is another active leader (%d,%d) \n",preply.Ballot, r.lastTriedBallot)
-		inst.lb.nacks++
-		if (r.Thrifty && inst.lb.nacks >= 1) || (inst.lb.nacks+1 > r.N>>1){
-			if (preply.Ballot % int32(r.N)) != r.Id + 1 && r.IsLeader{
-				r.makeBallot()
-				dlog.Printf("Retrying with ballot %d ",r.lastTriedBallot)
-				r.bcastPrepare(preply.Instance, r.lastTriedBallot)
-			}
-		}
+		inst.status = PREPARED
+		inst.lb.nacks = 0
+		r.recordInstanceMetadata(r.instanceSpace[preply.Instance])
+		r.sync()
+		r.bcastAccept(preply.Instance, inst.ballot, inst.cmds)
 	}
 
-	if preply.Ballot > r.maxRecvBallot {
-		r.maxRecvBallot = preply.Ballot
-	}
 }
 
 func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 	inst := r.instanceSpace[areply.Instance]
+
+	if areply.Ballot > r.maxRecvBallot {
+		r.maxRecvBallot = areply.Ballot
+	}
 
 	if inst.status != PREPARED && inst.status != ACCEPTED {
 		// we've move on, these are delayed replies, so just ignore
 		return
 	}
 
-	if areply.OK == TRUE {
-		inst.lb.acceptOKs++
-		if inst.lb.acceptOKs+1 > r.N>>1 {
-			inst = r.instanceSpace[areply.Instance]
-			inst.status = COMMITTED
-			r.bcastCommit(areply.Instance, inst.ballot, inst.cmds)
-			if inst.lb.clientProposals != nil && !r.Dreply {
-				// give client the all clear
-				for i := 0; i < len(inst.cmds); i++ {
-					propreply := &genericsmrproto.ProposeReplyTS{
-						TRUE,
-						inst.lb.clientProposals[i].CommandId,
-						state.NIL(),
-						inst.lb.clientProposals[i].Timestamp}
-					r.ReplyProposeTS(propreply, inst.lb.clientProposals[i].Reply, inst.lb.clientProposals[i].Mutex)
-				}
-			}
-
-			r.recordInstanceMetadata(r.instanceSpace[areply.Instance])
-			r.sync() //is this necessary?
-
-			r.updateCommittedUpTo()
-		}
-	} else {
+	if areply.Ballot != r.lastTriedBallot{
 		dlog.Printf("There is another active leader (%d,%d) \n",areply.Ballot, r.lastTriedBallot)
 		inst.lb.nacks++
 	}
 
-	if areply.Ballot > r.maxRecvBallot {
-		r.maxRecvBallot = areply.Ballot
+	inst.lb.acceptOKs++
+	if inst.lb.acceptOKs+1 > r.N>>1 {
+		inst = r.instanceSpace[areply.Instance]
+		inst.status = COMMITTED
+		r.bcastCommit(areply.Instance, inst.ballot, inst.cmds)
+		if inst.lb.clientProposals != nil && !r.Dreply {
+			// give client the all clear
+			for i := 0; i < len(inst.cmds); i++ {
+				propreply := &genericsmrproto.ProposeReplyTS{
+					TRUE,
+					inst.lb.clientProposals[i].CommandId,
+					state.NIL(),
+					inst.lb.clientProposals[i].Timestamp}
+				r.ReplyProposeTS(propreply, inst.lb.clientProposals[i].Reply, inst.lb.clientProposals[i].Mutex)
+			}
+		}
+
+		r.recordInstanceMetadata(r.instanceSpace[areply.Instance])
+		r.sync() //is this necessary?
+
+		r.updateCommittedUpTo()
 	}
+
 }
 
 func (r *Replica) executeCommands() {

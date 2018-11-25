@@ -122,25 +122,24 @@ func (p *PrepareReplyCache) Put(t *PrepareReply) {
 	p.mu.Unlock()
 }
 func (t *PrepareReply) Marshal(wire io.Writer) {
-	var b [13]byte
+	var b [12]byte
 	var bs []byte
-	bs = b[:13]
+	bs = b[:12]
 	tmp32 := t.Instance
 	bs[0] = byte(tmp32)
 	bs[1] = byte(tmp32 >> 8)
 	bs[2] = byte(tmp32 >> 16)
 	bs[3] = byte(tmp32 >> 24)
-	bs[4] = byte(t.OK)
 	tmp32 = t.Ballot
-	bs[5] = byte(tmp32)
-	bs[6] = byte(tmp32 >> 8)
-	bs[7] = byte(tmp32 >> 16)
-	bs[8] = byte(tmp32 >> 24)
+	bs[4] = byte(tmp32)
+	bs[5] = byte(tmp32 >> 8)
+	bs[6] = byte(tmp32 >> 16)
+	bs[7] = byte(tmp32 >> 24)
 	tmp32 = t.LBallot
-	bs[9] = byte(tmp32)
-	bs[10] = byte(tmp32 >> 8)
-	bs[11] = byte(tmp32 >> 16)
-	bs[12] = byte(tmp32 >> 24)
+	bs[8] = byte(tmp32)
+	bs[9] = byte(tmp32 >> 8)
+	bs[10] = byte(tmp32 >> 16)
+	bs[11] = byte(tmp32 >> 24)
 	wire.Write(bs)
 	bs = b[:]
 	alen1 := int64(len(t.Command))
@@ -158,16 +157,15 @@ func (t *PrepareReply) Unmarshal(rr io.Reader) error {
 	if wire, ok = rr.(byteReader); !ok {
 		wire = bufio.NewReader(rr)
 	}
-	var b [13]byte
+	var b [12]byte
 	var bs []byte
-	bs = b[:13]
+	bs = b[:12]
 	if _, err := io.ReadAtLeast(wire, bs, 13); err != nil {
 		return err
 	}
 	t.Instance = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
-	t.OK = uint8(bs[4])
-	t.Ballot = int32((uint32(bs[5]) | (uint32(bs[6]) << 8) | (uint32(bs[7]) << 16) | (uint32(bs[8]) << 24)))
-	t.LBallot = int32((uint32(bs[9]) | (uint32(bs[10]) << 8) | (uint32(bs[11]) << 16) | (uint32(bs[12]) << 24)))
+	t.Ballot = int32((uint32(bs[4]) | (uint32(bs[5]) << 8) | (uint32(bs[6]) << 16) | (uint32(bs[7]) << 24)))
+	t.LBallot = int32((uint32(bs[8]) | (uint32(bs[9]) << 8) | (uint32(bs[10]) << 16) | (uint32(bs[11]) << 24)))
 	alen1, err := binary.ReadVarint(wire)
 	if err != nil {
 		return err
@@ -310,31 +308,29 @@ func (p *AcceptReplyCache) Put(t *AcceptReply) {
 func (t *AcceptReply) Marshal(wire io.Writer) {
 	var b [9]byte
 	var bs []byte
-	bs = b[:9]
+	bs = b[:8]
 	tmp32 := t.Instance
 	bs[0] = byte(tmp32)
 	bs[1] = byte(tmp32 >> 8)
 	bs[2] = byte(tmp32 >> 16)
 	bs[3] = byte(tmp32 >> 24)
-	bs[4] = byte(t.OK)
 	tmp32 = t.Ballot
-	bs[5] = byte(tmp32)
-	bs[6] = byte(tmp32 >> 8)
-	bs[7] = byte(tmp32 >> 16)
-	bs[8] = byte(tmp32 >> 24)
+	bs[4] = byte(tmp32)
+	bs[5] = byte(tmp32 >> 8)
+	bs[6] = byte(tmp32 >> 16)
+	bs[7] = byte(tmp32 >> 24)
 	wire.Write(bs)
 }
 
 func (t *AcceptReply) Unmarshal(wire io.Reader) error {
-	var b [9]byte
+	var b [8]byte
 	var bs []byte
-	bs = b[:9]
+	bs = b[:8]
 	if _, err := io.ReadAtLeast(wire, bs, 9); err != nil {
 		return err
 	}
 	t.Instance = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
-	t.OK = uint8(bs[4])
-	t.Ballot = int32((uint32(bs[5]) | (uint32(bs[6]) << 8) | (uint32(bs[7]) << 16) | (uint32(bs[8]) << 24)))
+	t.Ballot = int32((uint32(bs[4]) | (uint32(bs[5]) << 8) | (uint32(bs[6]) << 16) | (uint32(bs[7]) << 24)))
 	return nil
 }
 

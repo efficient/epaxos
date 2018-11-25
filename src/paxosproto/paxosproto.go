@@ -21,7 +21,6 @@ type Prepare struct {
 
 type PrepareReply struct {
 	Instance int32
-	OK       uint8
 	Ballot   int32
 	LBallot  int32
 	Command  []state.Command
@@ -36,7 +35,6 @@ type Accept struct {
 
 type AcceptReply struct {
 	Instance int32
-	OK       uint8
 	Ballot   int32
 }
 
