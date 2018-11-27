@@ -122,9 +122,9 @@ func (p *PrepareReplyCache) Put(t *PrepareReply) {
 	p.mu.Unlock()
 }
 func (t *PrepareReply) Marshal(wire io.Writer) {
-	var b [12]byte
+	var b [20]byte
 	var bs []byte
-	bs = b[:12]
+	bs = b[:20]
 	tmp32 := t.Instance
 	bs[0] = byte(tmp32)
 	bs[1] = byte(tmp32 >> 8)
@@ -140,6 +140,16 @@ func (t *PrepareReply) Marshal(wire io.Writer) {
 	bs[9] = byte(tmp32 >> 8)
 	bs[10] = byte(tmp32 >> 16)
 	bs[11] = byte(tmp32 >> 24)
+	tmp32 = t.DefaultBallot
+	bs[12] = byte(tmp32)
+	bs[13] = byte(tmp32 >> 8)
+	bs[14] = byte(tmp32 >> 16)
+	bs[15] = byte(tmp32 >> 24)
+	tmp32 = t.AcceptorId
+	bs[16] = byte(tmp32)
+	bs[17] = byte(tmp32 >> 8)
+	bs[18] = byte(tmp32 >> 16)
+	bs[19] = byte(tmp32 >> 24)
 	wire.Write(bs)
 	bs = b[:]
 	alen1 := int64(len(t.Command))
@@ -157,15 +167,17 @@ func (t *PrepareReply) Unmarshal(rr io.Reader) error {
 	if wire, ok = rr.(byteReader); !ok {
 		wire = bufio.NewReader(rr)
 	}
-	var b [12]byte
+	var b [20]byte
 	var bs []byte
-	bs = b[:12]
-	if _, err := io.ReadAtLeast(wire, bs, 13); err != nil {
+	bs = b[:20]
+	if _, err := io.ReadAtLeast(wire, bs, 20); err != nil {
 		return err
 	}
 	t.Instance = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
 	t.Ballot = int32((uint32(bs[4]) | (uint32(bs[5]) << 8) | (uint32(bs[6]) << 16) | (uint32(bs[7]) << 24)))
 	t.LBallot = int32((uint32(bs[8]) | (uint32(bs[9]) << 8) | (uint32(bs[10]) << 16) | (uint32(bs[11]) << 24)))
+	t.DefaultBallot = int32((uint32(bs[12]) | (uint32(bs[13]) << 8) | (uint32(bs[14]) << 16) | (uint32(bs[15]) << 24)))
+	t.AcceptorId = int32((uint32(bs[16]) | (uint32(bs[17]) << 8) | (uint32(bs[18]) << 16) | (uint32(bs[19]) << 24)))
 	alen1, err := binary.ReadVarint(wire)
 	if err != nil {
 		return err
@@ -326,7 +338,7 @@ func (t *AcceptReply) Unmarshal(wire io.Reader) error {
 	var b [8]byte
 	var bs []byte
 	bs = b[:8]
-	if _, err := io.ReadAtLeast(wire, bs, 9); err != nil {
+	if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
 		return err
 	}
 	t.Instance = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))

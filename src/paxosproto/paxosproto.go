@@ -23,6 +23,8 @@ type PrepareReply struct {
 	Instance int32
 	Ballot   int32
 	LBallot  int32
+	DefaultBallot int32
+	AcceptorId int32
 	Command  []state.Command
 }
 
