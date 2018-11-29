@@ -87,17 +87,19 @@ func (master *Master) run() {
 		new_leader := false
 		for i, node := range master.nodes {
 			err := node.Call("Replica.Ping", new(genericsmrproto.PingArgs), new(genericsmrproto.PingReply))
+			master.lock.Lock()
 			if err != nil {
 				// log.Printf("Replica %d has failed to reply\n", i)
 				master.alive[i] = false
 				if master.leader[i] {
-					// neet to choose a new leader
+					// need to choose a new leader
 					new_leader = true
 					master.leader[i] = false
 				}
 			} else {
 				master.alive[i] = true
 			}
+			master.lock.Unlock()
 		}
 		if !new_leader {
 			continue
@@ -112,6 +114,7 @@ func (master *Master) run() {
 				}
 			}
 		}
+
 	}
 }
 
@@ -184,6 +187,9 @@ func (master *Master) Register(args *masterproto.RegisterArgs, reply *masterprot
 }
 
 func (master *Master) GetLeader(args *masterproto.GetLeaderArgs, reply *masterproto.GetLeaderReply) error {
+	master.lock.Lock()
+	defer master.lock.Unlock()
+
 	for i, l := range master.leader {
 		if l {
 			*reply = masterproto.GetLeaderReply{i}
