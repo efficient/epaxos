@@ -294,7 +294,9 @@ func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
 		}
 	}
 
+	r.Mutex.Lock()
 	r.Alive[rid] = false
+	r.Mutex.Unlock()
 }
 
 func (r *Replica) clientListener(conn net.Conn) {
@@ -376,6 +378,9 @@ func (r *Replica) RegisterRPC(msgObj fastrpc.Serializable, notify chan fastrpc.S
 }
 
 func (r *Replica) SendMsg(peerId int32, code uint8, msg fastrpc.Serializable) {
+	r.Mutex.Lock()
+	defer r.Mutex.Unlock()
+
 	w := r.PeerWriters[peerId]
 	if w==nil{
 		log.Printf("Connection to %d lost!\n", peerId)
@@ -405,6 +410,7 @@ func (r *Replica) ReplyProposeTS(reply *genericsmrproto.ProposeReplyTS, w *bufio
 
 func (r *Replica) SendBeacon(peerId int32) {
 	r.Mutex.Lock()
+	defer r.Mutex.Unlock()
 	w := r.PeerWriters[peerId]
 	if w==nil{
 		log.Printf("Connection to %d lost!\n", peerId)
@@ -415,12 +421,12 @@ func (r *Replica) SendBeacon(peerId int32) {
 	beacon.Marshal(w)
 	w.Flush()
 	dlog.Println("send beacon ", beacon.Timestamp, " to ", peerId)
-	r.Mutex.Unlock()
 }
 
 func (r *Replica) ReplyBeacon(beacon *Beacon) {
 	dlog.Println("replying beacon to ",beacon.Rid)
 	r.Mutex.Lock()
+	defer r.Mutex.Unlock()
 	w := r.PeerWriters[beacon.Rid]
 	if w==nil{
 		log.Printf("Connection to %d lost!\n", beacon.Rid)
@@ -430,7 +436,6 @@ func (r *Replica) ReplyBeacon(beacon *Beacon) {
 	rb := &genericsmrproto.BeaconReply{beacon.Timestamp}
 	rb.Marshal(w)
 	w.Flush()
-	r.Mutex.Unlock()
 }
 
 // updates the preferred order in which to communicate with peers according to a preferred quorum
@@ -471,10 +476,13 @@ func (r *Replica) ComputeClosestPeers() {
 			if i == r.Id {
 				continue
 			}
+			r.Mutex.Lock()
 			if r.Alive[i] {
+				r.Mutex.Unlock()
 				r.SendBeacon(i)
 			} else {
 				r.Latencies[i] = math.MaxInt64
+				r.Mutex.Unlock()
 			}
 		}
 		time.Sleep(500 * time.Millisecond)
