@@ -15,8 +15,8 @@ type PrepareReply struct {
 	AcceptorId int32
 	Replica    int32
 	Instance   int32
-	OK         uint8
 	Ballot     int32
+	VBallot    int32
 	Status     int8
 	Command    []state.Command
 	Seq        int32
@@ -36,11 +36,12 @@ type PreAccept struct {
 type PreAcceptReply struct {
 	Replica       int32
 	Instance      int32
-	OK            uint8
 	Ballot        int32
+	VBallot       int32
 	Seq           int32
 	Deps          []int32
 	CommittedDeps []int32
+	Status        int8
 }
 
 type PreAcceptOK struct {
@@ -52,7 +53,6 @@ type Accept struct {
 	Replica  int32
 	Instance int32
 	Ballot   int32
-	Count    int32
 	Seq      int32
 	Deps     []int32
 }
@@ -60,7 +60,6 @@ type Accept struct {
 type AcceptReply struct {
 	Replica  int32
 	Instance int32
-	OK       uint8
 	Ballot   int32
 }
 
@@ -68,16 +67,8 @@ type Commit struct {
 	LeaderId int32
 	Replica  int32
 	Instance int32
+	Ballot   int32
 	Command  []state.Command
-	Seq      int32
-	Deps     []int32
-}
-
-type CommitShort struct {
-	LeaderId int32
-	Replica  int32
-	Instance int32
-	Count    int32
 	Seq      int32
 	Deps     []int32
 }
@@ -96,8 +87,8 @@ type TryPreAcceptReply struct {
 	AcceptorId       int32
 	Replica          int32
 	Instance         int32
-	OK               uint8
 	Ballot           int32
+	VBallot          int32
 	ConflictReplica  int32
 	ConflictInstance int32
 	ConflictStatus   int8

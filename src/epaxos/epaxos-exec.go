@@ -124,12 +124,12 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 		sort.Sort(nodeArray(list))
 		for _, w := range list {
 			for idx := 0; idx < len(w.Cmds); idx++ {
-				dlog.Printf("Executing "+w.Cmds[idx].String()+" (%d,%d)[%d], deps=%d, scc_size=%d", w.Coordinator, w.Seq, idx, w.Deps, len(list))
+				shouldRespond:=e.r.Dreply && w.lb != nil && w.lb.clientProposals != nil
+				dlog.Printf("Executing "+w.Cmds[idx].String()+" at %d.%d with (seq=%d, deps=%d, scc_size=%d, shouldRespond=%t)\n", w.id.replica, w.id.instance, w.Seq, w.Deps, len(list), shouldRespond)
 				if w.Cmds[idx].Op == state.NONE {
-					dlog.Printf("Skipping no-op command")
-				} else if e.r.Dreply && w.lb != nil && w.lb.clientProposals != nil {
+					// nothing to do
+				} else if shouldRespond {
 					val := w.Cmds[idx].Execute(e.r.State)
-
 					e.r.ReplyProposeTS(
 						&genericsmrproto.ProposeReplyTS{
 							TRUE,
@@ -166,7 +166,7 @@ func (na nodeArray) Len() int {
 }
 
 func (na nodeArray) Less(i, j int) bool {
-	return na[i].Seq < na[j].Seq || (na[i].Seq == na[j].Seq && na[i].Coordinator < na[j].Coordinator) || (na[i].Seq == na[j].Seq && na[i].Coordinator == na[j].Coordinator && na[i].proposeTime < na[j].proposeTime)
+	return na[i].Seq < na[j].Seq || (na[i].Seq == na[j].Seq && na[i].id.replica < na[j].id.replica) || (na[i].Seq == na[j].Seq && na[i].id.replica == na[j].id.replica && na[i].proposeTime < na[j].proposeTime)
 }
 
 func (na nodeArray) Swap(i, j int) {
