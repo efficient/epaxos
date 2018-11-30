@@ -108,7 +108,9 @@ func (master *Master) run() {
 			if master.alive[i] {
 				err := new_master.Call("Replica.BeTheLeader", new(genericsmrproto.BeTheLeaderArgs), new(genericsmrproto.BeTheLeaderReply))
 				if err == nil {
+					master.lock.Lock()
 					master.leader[i] = true
+					master.lock.Unlock()
 					log.Printf("Replica %d is the new leader.", i)
 					break
 				}
