@@ -324,7 +324,6 @@ func (r *Replica) clientListener(conn net.Conn) {
 			if err = propose.Unmarshal(reader); err != nil {
 				break
 			}
-			dlog.Println("Got proposal (key=",propose.Command.K.String(),"value=",propose.Command.V.String(),")")
 			if r.LRead && (propose.Command.Op == state.GET || propose.Command.Op == state.SCAN) {
 				val := propose.Command.Execute(r.State)
 				propreply := &genericsmrproto.ProposeReplyTS{
@@ -464,7 +463,9 @@ func (r *Replica) UpdatePreferredPeerOrder(quorum []int32) {
 		}
 	}
 
+	r.Mutex.Lock()
 	r.PreferredPeerOrder = aux
+	r.Mutex.Unlock()
 }
 
 func (r *Replica) ComputeClosestPeers() {
