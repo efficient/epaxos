@@ -135,7 +135,7 @@ func (t *PrepareReply) Marshal(wire io.Writer) {
 	bs[5] = byte(tmp32 >> 8)
 	bs[6] = byte(tmp32 >> 16)
 	bs[7] = byte(tmp32 >> 24)
-	tmp32 = t.LBallot
+	tmp32 = t.VBallot
 	bs[8] = byte(tmp32)
 	bs[9] = byte(tmp32 >> 8)
 	bs[10] = byte(tmp32 >> 16)
@@ -175,7 +175,7 @@ func (t *PrepareReply) Unmarshal(rr io.Reader) error {
 	}
 	t.Instance = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
 	t.Ballot = int32((uint32(bs[4]) | (uint32(bs[5]) << 8) | (uint32(bs[6]) << 16) | (uint32(bs[7]) << 24)))
-	t.LBallot = int32((uint32(bs[8]) | (uint32(bs[9]) << 8) | (uint32(bs[10]) << 16) | (uint32(bs[11]) << 24)))
+	t.VBallot = int32((uint32(bs[8]) | (uint32(bs[9]) << 8) | (uint32(bs[10]) << 16) | (uint32(bs[11]) << 24)))
 	t.DefaultBallot = int32((uint32(bs[12]) | (uint32(bs[13]) << 8) | (uint32(bs[14]) << 16) | (uint32(bs[15]) << 24)))
 	t.AcceptorId = int32((uint32(bs[16]) | (uint32(bs[17]) << 8) | (uint32(bs[18]) << 16) | (uint32(bs[19]) << 24)))
 	alen1, err := binary.ReadVarint(wire)

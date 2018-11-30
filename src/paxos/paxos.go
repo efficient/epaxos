@@ -11,6 +11,7 @@ import (
 	"paxosproto"
 	"state"
 	"time"
+	"math"
 )
 
 const CHAN_BUFFER_SIZE = 200000
@@ -19,7 +20,7 @@ const FALSE = uint8(0)
 
 const MAX_BATCH = 1
 
-const COMMIT_GRACE_PERIOD = 100 * 1e9 // 1 second(s)
+const COMMIT_GRACE_PERIOD = 10 * 1e9 // 10 second(s)
 const SLEEP_TIME_NS = 1e6
 
 type Replica struct {
@@ -59,11 +60,11 @@ const (
 )
 
 type Instance struct {
-	cmds    []state.Command
-	cballot int32
-	lballot int32
-	status  InstanceStatus
-	lb      *LeaderBookkeeping
+	cmds   []state.Command
+	bal    int32
+	vbal   int32
+	status InstanceStatus
+	lb     *LeaderBookkeeping
 }
 
 type LeaderBookkeeping struct {
@@ -126,7 +127,7 @@ func (r *Replica) recordInstanceMetadata(inst *Instance) {
 	}
 
 	var b [5]byte
-	binary.LittleEndian.PutUint32(b[0:4], uint32(inst.cballot))
+	binary.LittleEndian.PutUint32(b[0:4], uint32(inst.bal))
 	b[4] = byte(inst.status)
 	r.StableStore.Write(b[:])
 }
@@ -242,7 +243,7 @@ func (r *Replica) run() {
 		case commitS := <-r.commitShortChan:
 			commit := commitS.(*paxosproto.CommitShort)
 			//got a Commit message
-			dlog.Printf("Received Commit from replica %d, for instance %d\n", commit.LeaderId, commit.Instance)
+			dlog.Printf("Received short Commit from replica %d, for instance %d\n", commit.LeaderId, commit.Instance)
 			r.handleCommitShort(commit)
 			break
 
@@ -269,14 +270,14 @@ func (r *Replica) run() {
 }
 
 func (r *Replica) makeBallot(instance int32) {
-	n := int32(0)
-	r.Mutex.Lock()
 	lb := r.instanceSpace[instance].lb
-	for n <= r.maxRecvBallot && n <= lb.lastTriedBallot {
-		n += int32(r.N)
+	n := int32(r.Id)
+	if r.IsLeader {
+		for n < r.defaultBallot[r.Id] || n < r.maxRecvBallot {
+			n += int32(r.N)
+		}
 	}
-	lb.lastTriedBallot =  n + r.Id
-	r.Mutex.Unlock()
+	lb.lastTriedBallot =  n
 	dlog.Printf("Last tried ballot is %d in %d\n", lb.lastTriedBallot, instance)
 }
 
@@ -393,10 +394,12 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	dlog.Printf("Batched %d\n", batchSize)
 
 	proposals := make([]*genericsmr.Propose, batchSize)
+	cmds := make([]state.Command, batchSize)
 	proposals[0] = propose
 	for i := 1; i < batchSize; i++ {
 		prop := <-r.ProposeChan
 		proposals[i] = prop
+		cmds[i] = prop.Command
 	}
 
 	r.crtInstance++
@@ -405,16 +408,22 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 		r.defaultBallot[r.Id],
 		r.defaultBallot[r.Id],
 		PREPARING,
-		&LeaderBookkeeping{proposals, 0, 0, 0, -1, nil, -1}}
+		&LeaderBookkeeping{proposals, 0, 0, 0, r.Id, nil, -1}}
 	r.makeBallot(r.crtInstance)
 
-	r.defaultBallot[r.Id] = r.instanceSpace[r.crtInstance].lb.lastTriedBallot
+	inst := r.instanceSpace[r.crtInstance]
+	lb := inst.lb
+	r.defaultBallot[r.Id] = lb.lastTriedBallot
 
-	if r.instanceSpace[r.crtInstance].lb.lastTriedBallot != r.smallestDefaultBallot {
-		dlog.Printf("Classic round for instance %d\n", r.crtInstance)
+	if lb.lastTriedBallot != r.smallestDefaultBallot {
+		dlog.Printf("Classic round for instance %d w. %s\n", r.crtInstance, propose.Command.String())
 		r.bcastPrepare(r.crtInstance)
 	}else{
-		dlog.Printf("Fast round for instance %d\n", r.crtInstance)
+		dlog.Printf("Fast round for instance %d w. %s\n", r.crtInstance, propose.Command.String())
+		inst.cmds = cmds
+		inst.bal = lb.lastTriedBallot
+		inst.vbal = lb.lastTriedBallot
+		inst.status = ACCEPTED
 		r.bcastAccept(r.crtInstance)
 	}
 
@@ -445,18 +454,18 @@ func (r *Replica) handlePrepare(prepare *paxosproto.Prepare) {
 		var pc paxosproto.Commit
 		pc.LeaderId = prepare.LeaderId
 		pc.Instance = prepare.Instance
-		pc.Ballot = inst.lballot
+		pc.Ballot = inst.vbal
 		pc.Command = inst.cmds
 		args := &pc
 		r.SendMsg(pc.LeaderId, r.commitRPC, args)
 		return
 	}
 
-	if inst.cballot > prepare.Ballot {
-		dlog.Printf("Joined higher ballot %d < %d", prepare.Ballot, inst.cballot)
-	}else if inst.cballot < prepare.Ballot {
+	if inst.bal > prepare.Ballot {
+		dlog.Printf("Joined higher ballot %d < %d", prepare.Ballot, inst.bal)
+	}else if inst.bal < prepare.Ballot {
 			dlog.Printf("Joining ballot %d ", prepare.Ballot)
-			inst.cballot = prepare.Ballot
+			inst.bal = prepare.Ballot
 			inst.status = PREPARED
 			if r.crtInstance == prepare.Instance{
 				r.defaultBallot[r.Id] = prepare.Ballot
@@ -466,7 +475,7 @@ func (r *Replica) handlePrepare(prepare *paxosproto.Prepare) {
 		dlog.Printf("Ballot %d already joined", prepare.Ballot)
 	}
 
-	preply := &paxosproto.PrepareReply{prepare.Instance,  inst.cballot, inst.lballot, r.defaultBallot[r.Id], r.Id, inst.cmds}
+	preply := &paxosproto.PrepareReply{prepare.Instance,  inst.bal, inst.vbal, r.defaultBallot[r.Id], r.Id, inst.cmds}
 	r.replyPrepare(prepare.LeaderId, preply)
 
 }
@@ -492,21 +501,21 @@ func (r *Replica) handleAccept(accept *paxosproto.Accept) {
 		r.recordInstanceMetadata(r.instanceSpace[accept.Instance])
 		r.recordCommands(accept.Command)
 		r.sync()
-	} else if accept.Ballot < inst.cballot {
-		dlog.Printf("Smaller ballot %d < %d\n", accept.Ballot, inst.cballot)
+	} else if accept.Ballot < inst.bal {
+		dlog.Printf("Smaller ballot %d < %d\n", accept.Ballot, inst.bal)
 	} else if inst.status == COMMITTED {
 		dlog.Printf("Already committed \n")
 	} else {
 		inst.cmds = accept.Command
-		inst.cballot = accept.Ballot
-		inst.lballot = accept.Ballot
+		inst.bal = accept.Ballot
+		inst.vbal = accept.Ballot
 		inst.status = ACCEPTED
 		r.recordInstanceMetadata(r.instanceSpace[accept.Instance])
 		r.recordCommands(accept.Command)
 		r.sync()
 	}
 
-	areply := &paxosproto.AcceptReply{accept.Instance, inst.cballot}
+	areply := &paxosproto.AcceptReply{accept.Instance, inst.bal}
 	r.replyAccept(accept.LeaderId, areply)
 
 }
@@ -531,15 +540,25 @@ func (r *Replica) handleCommit(commit *paxosproto.Commit) {
 		return
 	}
 
-	if commit.Ballot < inst.cballot {
-		dlog.Printf("Smaller ballot %d < %d\n", commit.Ballot, inst.cballot)
+	if commit.Ballot < inst.bal {
+		dlog.Printf("Smaller ballot %d < %d\n", commit.Ballot, inst.bal)
 		return
 	}
 
-	dlog.Printf("Committing \n")
+	dlog.Printf("Committing (crtInstance=%d)\n", r.crtInstance)
+
+	// FIXME timeout on client side?
+	if inst.lb != nil && inst.lb.clientProposals != nil {
+		for _, p := range inst.lb.clientProposals {
+			dlog.Printf("In %d, re-proposing %s \n", commit.Instance, p.Command.String())
+			r.ProposeChan <- p
+		}
+		inst.lb.clientProposals = nil
+	}
+
 	inst.cmds = commit.Command
-	inst.cballot = commit.Ballot
-	inst.lballot = commit.Ballot
+	inst.bal = commit.Ballot
+	inst.vbal = commit.Ballot
 	inst.status = COMMITTED
 	r.recordInstanceMetadata(r.instanceSpace[commit.Instance])
 	r.recordCommands(commit.Command)
@@ -552,19 +571,19 @@ func (r *Replica) handleCommitShort(commit *paxosproto.CommitShort) {
 		return
 	}
 
-	if inst != nil && inst.status == COMMITTED {
+	if inst.status == COMMITTED {
 		dlog.Printf("Already committed \n")
 		return
 	}
 
-	if commit.Ballot < inst.cballot {
-		dlog.Printf("Smaller ballot %d < %d\n", commit.Ballot, inst.cballot)
+	if commit.Ballot < inst.bal {
+		dlog.Printf("Smaller ballot %d < %d\n", commit.Ballot, inst.bal)
 		return
 	}
 
 	dlog.Printf("Committing \n")
 	r.instanceSpace[commit.Instance].status = COMMITTED
-	r.instanceSpace[commit.Instance].cballot = commit.Ballot
+	r.instanceSpace[commit.Instance].bal = commit.Ballot
 	r.recordInstanceMetadata(r.instanceSpace[commit.Instance])
 	r.recordCommands(r.instanceSpace[commit.Instance].cmds)
 }
@@ -582,12 +601,6 @@ func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
 		return
 	}
 
-	if preply.LBallot > -1 {
-		dlog.Printf("Command(s) found \n",)
-		lb.ballot = preply.LBallot
-		lb.cmds = preply.Command
-	}
-
 	if preply.Ballot > lb.lastTriedBallot{
 		dlog.Printf("Another active leader using ballot %d \n",preply.Ballot)
 		lb.nacks++
@@ -601,18 +614,15 @@ func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
 		return
 	}
 
+	if preply.VBallot > lb.ballot {
+		dlog.Printf("Command(s) found \n",)
+		lb.ballot = preply.VBallot
+		lb.cmds = preply.Command
+	}
+
 	lb.prepareOKs++
 	if r.defaultBallot[preply.AcceptorId] < preply.DefaultBallot{
 		r.defaultBallot[preply.AcceptorId] = preply.DefaultBallot
-		m := int32(-1)
-		for _, e := range r.defaultBallot {
-			if e < m {
-				m = e
-			}
-		}
-		if m > r.smallestDefaultBallot{
-			r.smallestDefaultBallot = m
-		}
 	}
 
 	if lb.prepareOKs+1 > r.N>>1 {
@@ -628,8 +638,22 @@ func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
 			lb.cmds = state.NOOP()
 		}
 		inst.cmds = lb.cmds
-		inst.cballot = lb.lastTriedBallot
+		inst.bal = lb.lastTriedBallot
 		inst.status = ACCEPTED
+
+		m := int32(math.MaxInt32)
+		count := 0
+		for _, e := range r.defaultBallot {
+			if e != -1 {
+				count++
+				if e < m  {
+					m = e
+				}
+			}
+		}
+		if count >= r.N/2 && m > r.smallestDefaultBallot{
+			r.smallestDefaultBallot = m
+		}
 
 		r.recordInstanceMetadata(r.instanceSpace[preply.Instance])
 		r.sync()
@@ -646,8 +670,8 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 		r.maxRecvBallot = areply.Ballot
 	}
 
-	if inst.status != PREPARED && inst.status != ACCEPTED {
-		// we've move on, these are delayed replies, so just ignore
+	if inst.status >= COMMITTED {
+		dlog.Printf("Already committed ")
 		return
 	}
 
@@ -671,9 +695,13 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 
 	lb.acceptOKs++
 	if lb.acceptOKs+1 > r.N>>1 {
+		dlog.Printf("Committing (crtInstance=%d)\n", r.crtInstance)
 		inst = r.instanceSpace[areply.Instance]
 		inst.status = COMMITTED
-		r.bcastCommit(areply.Instance, inst.cballot, inst.cmds)
+		r.recordInstanceMetadata(r.instanceSpace[areply.Instance])
+		r.sync() //is this necessary?
+
+		r.bcastCommit(areply.Instance, inst.bal, inst.cmds)
 		if lb.clientProposals != nil && !r.Dreply {
 			// give client the all clear
 			for i := 0; i < len(inst.cmds); i++ {
@@ -685,9 +713,8 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 				r.ReplyProposeTS(propreply, lb.clientProposals[i].Reply, lb.clientProposals[i].Mutex)
 			}
 		}
-
-		r.recordInstanceMetadata(r.instanceSpace[areply.Instance])
-		r.sync() //is this necessary?
+	} else {
+		dlog.Printf("Not enough \n")
 	}
 
 }
@@ -732,7 +759,7 @@ func (r *Replica) executeCommands() {
 			} else {
 				if i == problemInstance {
 					timeout += SLEEP_TIME_NS
-					if (r.IsLeader && timeout >= COMMIT_GRACE_PERIOD) || timeout >= 10*COMMIT_GRACE_PERIOD {
+					if timeout >= COMMIT_GRACE_PERIOD{
 						dlog.Printf("Recovering instance %d \n",i)
 						r.instancesToRecover <- problemInstance
 						problemInstance = 0
@@ -747,6 +774,8 @@ func (r *Replica) executeCommands() {
 		}
 
 		if !executed {
+			r.Mutex.Lock()
+			r.Mutex.Unlock() // FIXME for cache coherence
 			time.Sleep(SLEEP_TIME_NS)
 		}
 	}

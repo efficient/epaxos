@@ -4,15 +4,6 @@ import (
 	"state"
 )
 
-const (
-	PREPARE uint8 = iota
-	PREPARE_REPLY
-	ACCEPT
-	ACCEPT_REPLY
-	COMMIT
-	COMMIT_SHORT
-)
-
 type Prepare struct {
 	LeaderId   int32
 	Instance   int32
@@ -20,12 +11,12 @@ type Prepare struct {
 }
 
 type PrepareReply struct {
-	Instance int32
-	Ballot   int32
-	LBallot  int32
+	Instance      int32
+	Ballot        int32
+	VBallot       int32
 	DefaultBallot int32
-	AcceptorId int32
-	Command  []state.Command
+	AcceptorId    int32
+	Command       []state.Command
 }
 
 type Accept struct {
