@@ -99,7 +99,7 @@ if [ "${TYPE}" == "client" ]; then
     echo "Will check if all are connected..."
     connected=-1
     while [ ${connected} != ${NCLIENTS} ]; do
-        connected=$(cat logs/c_*.txt | grep "Connected" | wc -l)
+        connected=$(cat logs/c_*.txt 2>/dev/null | grep "Connected" | wc -l)
     done
     echo "Connect OK!"
 
