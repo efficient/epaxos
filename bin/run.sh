@@ -90,9 +90,16 @@ if [ "${TYPE}" == "client" ]; then
         #echo "> Client $i of ${NCLIENTS} started!"
     done
 
+    echo "Will check if all are started..."
     started=-1
     while [ ${started} != ${NCLIENTS} ]; do
-        started=$(cat logs/c_*.txt | grep "Connected" | wc -l)
+        started=$(ls logs/c_*.txt 2>/dev/null | wc -l)
+    done
+
+    echo "Will check if all are connected..."
+    connected=-1
+    while [ ${connected} != ${NCLIENTS} ]; do
+        connected=$(cat logs/c_*.txt 2>/dev/null | grep "Connected" | wc -l)
     done
     echo "Connect OK!"
 
