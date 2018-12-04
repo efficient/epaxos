@@ -17,9 +17,11 @@ import (
 	"errors"
 	"bytes"
 	"encoding/binary"
+	"net/http"
 )
 
 const TRUE = uint8(1)
+const TIMEOUT = 5 * time.Second
 
 type Parameters struct {
 	masterAddr     string
@@ -55,13 +57,14 @@ func NewParameters(masterAddr string, masterPort int, verbose bool, leaderless b
 		nil,
 		nil,
 		0,
-		5}}
+		10}}
 
 func (b *Parameters) Connect() error {
-
+	http.DefaultTransport.(*http.Transport).ResponseHeaderTimeout = TIMEOUT
 	master, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", b.masterAddr, b.masterPort))
 	if err != nil {
 		log.Printf("Error connecting to master\n")
+		master.Close()
 		return err
 	}
 
@@ -71,6 +74,7 @@ func (b *Parameters) Connect() error {
 		err = master.Call("Master.GetReplicaList", new(masterproto.GetReplicaListArgs), rlReply)
 		if err != nil {
 			log.Printf("Error making the GetReplicaList RPC")
+			master.Close()
 			return err
 		}
 		if rlReply.Ready {
@@ -117,6 +121,7 @@ func (b *Parameters) Connect() error {
 		reply := new(masterproto.GetLeaderReply)
 		if err = master.Call("Master.GetLeader", new(masterproto.GetLeaderArgs), reply); err != nil {
 			log.Printf("Error making the GetLeader RPC\n")
+			master.Close()
 			return err
 		}
 		b.Leader = reply.LeaderId
@@ -252,7 +257,7 @@ func (b *Parameters) execute(args genericsmrproto.Propose) []byte{
 				b.retries--
 				b.Disconnect()
 				log.Println("Reconnecting ...")
-				time.Sleep(10 * time.Second) // must be inline with the closest quorum re-computation
+				time.Sleep(TIMEOUT) // must be inline with the closest quorum re-computation
 				err = b.Connect()
 			}
 
