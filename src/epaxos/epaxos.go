@@ -1029,7 +1029,7 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 			r.Stats.M["totalCommitTime"] += int(time.Now().UnixNano() - inst.proposeTime)
 		}
 		r.Mutex.Unlock()
-	} else if inst.lb.preAcceptOKs >= (r.slowQuorumSize()-1) && !precondition {
+	} else if inst.lb.preAcceptOKs >= r.fastQuorumSize()-1 {
 		dlog.Printf("Slow path %d.%d (inst.lb.allEqual=%t, allCommitted=%t, isInitialBallot=%t)\n", pareply.Replica, pareply.Instance, allEqual, allCommitted, isInitialBallot)
 		lb.status = epaxosproto.ACCEPTED
 
