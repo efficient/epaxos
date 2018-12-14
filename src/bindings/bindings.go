@@ -63,6 +63,7 @@ func NewParameters(masterAddr string, masterPort int, verbose bool, leaderless b
 func (b *Parameters) Connect() error {
 	var resp *http.Response
 
+	log.Printf("Dialing master...\n")
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", b.masterAddr, b.masterPort), TIMEOUT)
 	if err == nil {
 		io.WriteString(conn, "CONNECT "+rpc.DefaultRPCPath+" HTTP/1.0\n\n")
@@ -71,10 +72,12 @@ func (b *Parameters) Connect() error {
 
 	if err != nil || resp == nil || resp.Status != "200 Connected to Go RPC" {
 		log.Printf("Error connecting to master\n")
+		conn.Close()
 		return err
 	}
 
 	master := rpc.NewClient(conn)
+	log.Printf("Getting replica list from master...\n")
 	var rlReply *masterproto.GetReplicaListReply
 	for done := false; !done; {
 		rlReply = new(masterproto.GetReplicaListReply)
@@ -89,6 +92,7 @@ func (b *Parameters) Connect() error {
 		}
 	}
 
+	log.Printf("Pinging all replicas...\n")
 	minLatency := math.MaxFloat64
 	b.replicaLists = rlReply.ReplicaList
 	for i := 0; i < len(b.replicaLists); i++ {

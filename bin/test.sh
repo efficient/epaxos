@@ -83,6 +83,7 @@ stop_all() {
 
 start_exp() {
     rm -rf ${LOGS}/*
+    mkdir -p ${LOGS}
     stop_all
 }
 
