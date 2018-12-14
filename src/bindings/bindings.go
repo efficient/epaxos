@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"net/http"
+	"io"
 )
 
 const TRUE = uint8(1)
@@ -60,14 +61,20 @@ func NewParameters(masterAddr string, masterPort int, verbose bool, leaderless b
 		10}}
 
 func (b *Parameters) Connect() error {
-	http.DefaultTransport.(*http.Transport).ResponseHeaderTimeout = TIMEOUT
-	master, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", b.masterAddr, b.masterPort))
-	if err != nil {
+	var resp *http.Response
+
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", b.masterAddr, b.masterPort), TIMEOUT)
+	if err == nil {
+		io.WriteString(conn, "CONNECT "+rpc.DefaultRPCPath+" HTTP/1.0\n\n")
+		resp, err = http.ReadResponse(bufio.NewReader(conn), &http.Request{Method: "CONNECT"})
+	}
+
+	if err != nil || resp == nil || resp.Status != "200 Connected to Go RPC" {
 		log.Printf("Error connecting to master\n")
-		master.Close()
 		return err
 	}
 
+	master := rpc.NewClient(conn)
 	var rlReply *masterproto.GetReplicaListReply
 	for done := false; !done; {
 		rlReply = new(masterproto.GetReplicaListReply)
