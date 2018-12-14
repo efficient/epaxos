@@ -60,6 +60,7 @@ func NewParameters(masterAddr string, masterPort int, verbose bool, leaderless b
 		10}}
 
 func (b *Parameters) Connect() error {
+	log.Printf("Dialing master...\n")
 	http.DefaultTransport.(*http.Transport).ResponseHeaderTimeout = TIMEOUT
 	master, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", b.masterAddr, b.masterPort))
 	if err != nil {
@@ -68,6 +69,7 @@ func (b *Parameters) Connect() error {
 		return err
 	}
 
+	log.Printf("Getting replica list from master...\n")
 	var rlReply *masterproto.GetReplicaListReply
 	for done := false; !done; {
 		rlReply = new(masterproto.GetReplicaListReply)
@@ -82,6 +84,7 @@ func (b *Parameters) Connect() error {
 		}
 	}
 
+	log.Printf("Pinging all replicas...\n")
 	minLatency := math.MaxFloat64
 	b.replicaLists = rlReply.ReplicaList
 	for i := 0; i < len(b.replicaLists); i++ {

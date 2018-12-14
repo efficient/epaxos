@@ -81,13 +81,12 @@ fi
 
 if [ "${TYPE}" == "client" ]; then
     args="-maddr ${MADDR} -mport ${MPORT} ${CLIENT_EXTRA_ARGS}"
-    echo "client mode: ${args}" >all_logs
 
     mkdir -p logs/
 
     for i in $(seq 1 ${NCLIENTS}); do
         ${DIR}/client ${args} >"logs/c_$i.txt" 2>&1 &
-        #echo "> Client $i of ${NCLIENTS} started!"
+        echo "> Client $i of ${NCLIENTS} started!"
     done
 
     echo "Will check if all are started..."
@@ -103,20 +102,15 @@ if [ "${TYPE}" == "client" ]; then
     done
     echo "Connect OK!"
 
-    for i in $(seq 1 ${NCLIENTS}); do
-         tail -f "logs/c_$i.txt" >>all_logs &
-    done
-    
     ended=-1
     while [ ${ended} != ${NCLIENTS} ]; do
         ended=$(cat logs/c_*.txt | grep "Test took" | wc -l)
         echo "> Ended ${ended} of ${NCLIENTS}!"
-        #ls -d logs/* | xargs wc -l
         sleep 10
     done
 
     pkill -P $$
-    
+
     echo "Will sleep forever"
     while true; do sleep 10000; done
 fi
