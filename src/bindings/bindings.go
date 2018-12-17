@@ -82,14 +82,21 @@ func (b *Parameters) Connect() error {
 	var rlReply *masterproto.GetReplicaListReply
 	for done := false; !done; {
 		rlReply = new(masterproto.GetReplicaListReply)
-		err = master.Call("Master.GetReplicaList", new(masterproto.GetReplicaListArgs), rlReply)
-		if err != nil {
-			log.Printf("Error making the GetReplicaList RPC")
-			master.Close()
-			return err
-		}
-		if rlReply.Ready {
-			done = true
+		// from https://stackoverflow.com/a/23330195/4262469
+		c := make(chan error, 1)
+		go func() { c <- master.Call("Master.GetReplicaList", new(masterproto.GetReplicaListArgs), rlReply) }()
+		select {
+		case err := <-c:
+			if err != nil {
+				log.Printf("Error making the GetReplicaList RPC")
+				master.Close()
+				return err
+			}
+			if rlReply.Ready {
+				done = true
+			}
+		case <-time.After(TIMEOUT):
+			log.Printf("GetReplicaList RPC timeout!")
 		}
 	}
 
