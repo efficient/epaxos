@@ -82,10 +82,14 @@ fi
 if [ "${TYPE}" == "client" ]; then
     args="-maddr ${MADDR} -mport ${MPORT} ${CLIENT_EXTRA_ARGS}"
 
+    # aggregate all logs in a single file
+    ALL=all_logs
+    echo "client mode: ${args}" >${ALL}
+
     mkdir -p logs/
 
     for i in $(seq 1 ${NCLIENTS}); do
-        ${DIR}/client ${args} >"logs/c_$i.txt" 2>&1 &
+        ${DIR}/client ${args} 2>&1 | tee -a logs/c_${i}.txt ${ALL} >/dev/null &
         echo "> Client $i of ${NCLIENTS} started!"
     done
 
@@ -98,13 +102,13 @@ if [ "${TYPE}" == "client" ]; then
     echo "Will check if all are connected..."
     connected=-1
     while [ ${connected} != ${NCLIENTS} ]; do
-        connected=$(cat logs/c_*.txt 2>/dev/null | grep "Connected" | wc -l)
+        connected=$(grep "Connected" ${ALL} | wc -l)
     done
     echo "Connect OK!"
 
     ended=-1
     while [ ${ended} != ${NCLIENTS} ]; do
-        ended=$(cat logs/c_*.txt | grep "Test took" | wc -l)
+        ended=$(grep "Test took" ${ALL} | wc -l)
         echo "> Ended ${ended} of ${NCLIENTS}!"
         sleep 10
     done
