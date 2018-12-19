@@ -7,12 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"genericsmrproto"
-	"io"
 	"log"
 	"masterproto"
 	"math"
 	"net"
-	"net/http"
 	"net/rpc"
 	"os/exec"
 	"state"
@@ -62,49 +60,31 @@ func NewParameters(masterAddr string, masterPort int, verbose bool, leaderless b
 }
 
 func (b *Parameters) Connect() error {
-	var resp *http.Response
+	var err error
 
 	log.Printf("Dialing master...\n")
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", b.masterAddr, b.masterPort), TIMEOUT)
-	if err == nil {
-		io.WriteString(conn, "CONNECT "+rpc.DefaultRPCPath+" HTTP/1.0\n\n")
-		resp, err = http.ReadResponse(bufio.NewReader(conn), &http.Request{Method: "CONNECT"})
-	}
+	var master *rpc.Client
+	master = b.MasterDial()
 
-	if err != nil || resp == nil || resp.Status != "200 Connected to Go RPC" {
-		log.Printf("Error connecting to master\n")
-		conn.Close()
-		return err
-	}
-
-	master := rpc.NewClient(conn)
 	log.Printf("Getting replica list from master...\n")
-	var rlReply *masterproto.GetReplicaListReply
+	var replyRL *masterproto.GetReplicaListReply
+
+	// loop until the call succeeds
 	for done := false; !done; {
-		rlReply = new(masterproto.GetReplicaListReply)
-		// from https://stackoverflow.com/a/23330195/4262469
-		c := make(chan error, 1)
-		go func() { c <- master.Call("Master.GetReplicaList", new(masterproto.GetReplicaListArgs), rlReply) }()
-		select {
-		case err := <-c:
-			if err != nil {
-				log.Printf("Error making the GetReplicaList RPC")
-				master.Close()
-				return err
-			}
-			if rlReply.Ready {
-				done = true
-			}
-		case <-time.After(TIMEOUT):
-			log.Printf("GetReplicaList RPC timeout!")
+		replyRL = new(masterproto.GetReplicaListReply)
+		err = Call(master, "Master.GetReplicaList", new(masterproto.GetReplicaListArgs), replyRL)
+		if err == nil && replyRL.Ready {
+			done = true
 		}
 	}
 
+	// save replica list
+	b.replicaLists = replyRL.ReplicaList
+
 	log.Printf("Pinging all replicas...\n")
 	minLatency := math.MaxFloat64
-	b.replicaLists = rlReply.ReplicaList
 	for i := 0; i < len(b.replicaLists); i++ {
-		if !rlReply.AliveList[i] {
+		if !replyRL.AliveList[i] {
 			continue
 		}
 		addr := strings.Split(string(b.replicaLists[i]), ":")[0]
@@ -127,8 +107,8 @@ func (b *Parameters) Connect() error {
 
 	log.Printf("node list %v, closest (alive) = (%v,%vms)", b.replicaLists, b.closestReplica, minLatency)
 
+	// init some parameters
 	b.n = len(b.replicaLists)
-
 	b.servers = make([]net.Conn, b.n)
 	b.readers = make([]*bufio.Reader, b.n)
 	b.writers = make([]*bufio.Writer, b.n)
@@ -136,7 +116,7 @@ func (b *Parameters) Connect() error {
 	var toConnect []int
 	toConnect = append(toConnect, b.closestReplica)
 
-	if b.leaderless == false {
+	if !b.leaderless {
 		reply := new(masterproto.GetLeaderReply)
 		if err = master.Call("Master.GetLeader", new(masterproto.GetLeaderArgs), reply); err != nil {
 			log.Printf("Error making the GetLeader RPC\n")
@@ -152,20 +132,59 @@ func (b *Parameters) Connect() error {
 
 	for _, i := range toConnect {
 		log.Println("Connection to ", i, " -> ", b.replicaLists[i])
-		b.servers[i], err = net.DialTimeout("tcp", b.replicaLists[i], 10*time.Second)
-		if err != nil {
-			log.Println("Connection error with ", b.replicaLists[i])
-			return err
-		} else {
-			b.readers[i] = bufio.NewReader(b.servers[i])
-			b.writers[i] = bufio.NewWriter(b.servers[i])
-		}
+		b.servers[i] = Dial(b.replicaLists[i])
+		b.readers[i] = bufio.NewReader(b.servers[i])
+		b.writers[i] = bufio.NewWriter(b.servers[i])
 	}
 
 	log.Println("Connected")
 
 	return nil
+}
 
+func Dial(addr string) net.Conn {
+	var conn net.Conn
+	var err error
+	var done bool
+
+	for done = false; !done; {
+		conn, err = net.DialTimeout("tcp", addr, TIMEOUT)
+		if err != nil {
+			log.Println("Connection error with ", addr, ": ", err)
+		} else {
+			done = true
+		}
+	}
+
+	return conn
+}
+
+func (b *Parameters) MasterDial() *rpc.Client {
+	var master *rpc.Client
+	var addr string
+	var conn net.Conn
+
+	addr = fmt.Sprintf("%s:%d", b.masterAddr, b.masterPort)
+	conn = Dial(addr)
+	master = rpc.NewClient(conn)
+
+	return master
+}
+
+func Call(cli *rpc.Client, method string, args *masterproto.GetReplicaListArgs, reply *masterproto.GetReplicaListReply) error {
+	c := make(chan error, 1)
+	go func() { c <- cli.Call(method, args, reply) }()
+	select {
+	case err := <-c:
+		if err != nil {
+			log.Printf("Error in RPC: " + method)
+		}
+		return err
+
+	case <-time.After(TIMEOUT):
+		log.Printf("RPC timeout: " + method)
+		return errors.New("RPC timeout")
+	}
 }
 
 func (b *Parameters) Disconnect() {
