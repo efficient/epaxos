@@ -20,7 +20,8 @@ import (
 )
 
 const TRUE = uint8(1)
-const TIMEOUT = 5 * time.Second
+const TIMEOUT = 3 * time.Second
+const MAX_ATTEMPTS = 3
 
 type Parameters struct {
 	masterAddr     string
@@ -70,42 +71,25 @@ func (b *Parameters) Connect() error {
 	var replyRL *masterproto.GetReplicaListReply
 
 	// loop until the call succeeds
-	for done := false; !done; {
+	// (or too many attempts)
+	for i, done := 0, false; !done; i++ {
 		replyRL = new(masterproto.GetReplicaListReply)
 		err = Call(master, "Master.GetReplicaList", new(masterproto.GetReplicaListArgs), replyRL)
 		if err == nil && replyRL.Ready {
 			done = true
+		} else if i == MAX_ATTEMPTS {
+			// if too many attempts, connect again
+			master.Close()
+			return errors.New("Too many connect attempts!")
 		}
 	}
 
-	// save replica list
-	b.replicaLists = replyRL.ReplicaList
-
-	log.Printf("Pinging all replicas...\n")
-	minLatency := math.MaxFloat64
-	for i := 0; i < len(b.replicaLists); i++ {
-		if !replyRL.AliveList[i] {
-			continue
-		}
-		addr := strings.Split(string(b.replicaLists[i]), ":")[0]
-		if addr == "" {
-			addr = "127.0.0.1"
-		}
-		out, err := exec.Command("ping", addr, "-c 3", "-q").Output()
-		if err == nil {
-			latency, _ := strconv.ParseFloat(strings.Split(string(out), "/")[4], 64)
-			log.Printf("%v -> %v", i, latency)
-			if minLatency > latency {
-				b.closestReplica = i
-				minLatency = latency
-			}
-		} else {
-			log.Printf("cannot connect to " + b.replicaLists[i])
-			return err
-		}
+	// get closest replica
+	err = b.FindClosestReplica(replyRL)
+	if err != nil {
+		return err
 	}
-
-	log.Printf("node list %v, closest (alive) = (%v,%vms)", b.replicaLists, b.closestReplica, minLatency)
+	log.Printf("node list %v, closest (alive) = %v", b.replicaLists, b.closestReplica)
 
 	// init some parameters
 	b.n = len(b.replicaLists)
@@ -113,17 +97,27 @@ func (b *Parameters) Connect() error {
 	b.readers = make([]*bufio.Reader, b.n)
 	b.writers = make([]*bufio.Writer, b.n)
 
+	// get list of nodes to connect to
 	var toConnect []int
 	toConnect = append(toConnect, b.closestReplica)
 
 	if !b.leaderless {
-		reply := new(masterproto.GetLeaderReply)
-		if err = master.Call("Master.GetLeader", new(masterproto.GetLeaderArgs), reply); err != nil {
-			log.Printf("Error making the GetLeader RPC\n")
-			master.Close()
-			return err
+		log.Printf("Getting leader from master...\n")
+		var replyL *masterproto.GetLeaderReply
+
+		for i, done := 0, false; !done; i++ {
+			replyL = new(masterproto.GetLeaderReply)
+			err = Call(master, "Master.GetLeader", new(masterproto.GetLeaderArgs), replyL)
+			if err == nil {
+				done = true
+			} else if i == MAX_ATTEMPTS {
+				// if too many attempts, connect again
+				master.Close()
+				return errors.New("Too many connect attempts!")
+			}
 		}
-		b.Leader = reply.LeaderId
+
+		b.Leader = replyL.LeaderId
 		if b.closestReplica != b.Leader {
 			toConnect = append(toConnect, b.Leader)
 		}
@@ -171,7 +165,7 @@ func (b *Parameters) MasterDial() *rpc.Client {
 	return master
 }
 
-func Call(cli *rpc.Client, method string, args *masterproto.GetReplicaListArgs, reply *masterproto.GetReplicaListReply) error {
+func Call(cli *rpc.Client, method string, args interface{}, reply interface{}) error {
 	c := make(chan error, 1)
 	go func() { c <- cli.Call(method, args, reply) }()
 	select {
@@ -185,6 +179,41 @@ func Call(cli *rpc.Client, method string, args *masterproto.GetReplicaListArgs, 
 		log.Printf("RPC timeout: " + method)
 		return errors.New("RPC timeout")
 	}
+}
+
+func (b *Parameters) FindClosestReplica(replyRL *masterproto.GetReplicaListReply) error {
+	// save replica list and closest
+	b.replicaLists = replyRL.ReplicaList
+
+	log.Printf("Pinging all replicas...\n")
+
+	minLatency := math.MaxFloat64
+	for i := 0; i < len(b.replicaLists); i++ {
+		if !replyRL.AliveList[i] {
+			continue
+		}
+		addr := strings.Split(string(b.replicaLists[i]), ":")[0]
+		if addr == "" {
+			addr = "127.0.0.1"
+		}
+		out, err := exec.Command("ping", addr, "-c 3", "-q").Output()
+		if err == nil {
+			// parse ping output
+			latency, _ := strconv.ParseFloat(strings.Split(string(out), "/")[4], 64)
+			log.Printf("%v -> %v", i, latency)
+
+			// save if closest replica
+			if minLatency > latency {
+				b.closestReplica = i
+				minLatency = latency
+			}
+		} else {
+			log.Printf("cannot connect to " + b.replicaLists[i])
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (b *Parameters) Disconnect() {
