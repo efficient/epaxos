@@ -22,6 +22,8 @@ const CHAN_BUFFER_SIZE = 200000
 const TRUE = uint8(1)
 const FALSE = uint8(0)
 
+var storage string
+
 type RPCPair struct {
 	Obj  fastrpc.Serializable
 	Chan chan fastrpc.Serializable
@@ -107,8 +109,10 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bo
 		&genericsmrproto.Stats{make(map[string]int)}}
 
 	var err error
+	r.StableStore, err =
+		os.Create(fmt.Sprintf("%v/stable-store-replica%d", storage, r.Id))
 
-	if r.StableStore, err = os.Create(fmt.Sprintf("stable-store-replica%d", r.Id)); err != nil {
+	if err != nil {
 		log.Fatal(err)
 	}
 
