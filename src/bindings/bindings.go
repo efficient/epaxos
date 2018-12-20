@@ -7,10 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"genericsmrproto"
+	"io"
 	"log"
 	"masterproto"
 	"math"
 	"net"
+	"net/http"
 	"net/rpc"
 	"os/exec"
 	"state"
@@ -139,13 +141,24 @@ func (b *Parameters) Connect() error {
 func Dial(addr string) net.Conn {
 	var conn net.Conn
 	var err error
+	var resp *http.Response
 	var done bool
 
 	for done = false; !done; {
 		conn, err = net.DialTimeout("tcp", addr, TIMEOUT)
-		if err != nil {
+
+		if err == nil {
+			// connect if no error
+			io.WriteString(conn, "CONNECT "+rpc.DefaultRPCPath+" HTTP/1.0\n\n")
+			resp, err = http.ReadResponse(bufio.NewReader(conn), &http.Request{Method: "CONNECT"})
+		}
+
+		if err != nil || resp == nil || resp.Status != "200 Connected to Go RPC" {
+			// if error, try again
 			log.Println("Connection error with ", addr, ": ", err)
+			conn.Close()
 		} else {
+			// else, we're done!
 			done = true
 		}
 	}
