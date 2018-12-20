@@ -128,7 +128,7 @@ func (b *Parameters) Connect() error {
 
 	for _, i := range toConnect {
 		log.Println("Connection to ", i, " -> ", b.replicaLists[i])
-		b.servers[i] = Dial(b.replicaLists[i])
+		b.servers[i] = Dial(b.replicaLists[i], false)
 		b.readers[i] = bufio.NewReader(b.servers[i])
 		b.writers[i] = bufio.NewWriter(b.servers[i])
 	}
@@ -138,7 +138,7 @@ func (b *Parameters) Connect() error {
 	return nil
 }
 
-func Dial(addr string) net.Conn {
+func Dial(addr string, connect bool) net.Conn {
 	var conn net.Conn
 	var err error
 	var resp *http.Response
@@ -148,18 +148,22 @@ func Dial(addr string) net.Conn {
 		conn, err = net.DialTimeout("tcp", addr, TIMEOUT)
 
 		if err == nil {
-			// connect if no error
-			io.WriteString(conn, "CONNECT "+rpc.DefaultRPCPath+" HTTP/1.0\n\n")
-			resp, err = http.ReadResponse(bufio.NewReader(conn), &http.Request{Method: "CONNECT"})
+			if connect {
+				// connect if no error
+				io.WriteString(conn, "CONNECT "+rpc.DefaultRPCPath+" HTTP/1.0\n\n")
+				resp, err = http.ReadResponse(bufio.NewReader(conn), &http.Request{Method: "CONNECT"})
+				if err == nil && resp != nil && resp.Status == "200 Connected to Go RPC" {
+					done = true
+				}
+			} else {
+				done = true
+			}
 		}
 
-		if err != nil || resp == nil || resp.Status != "200 Connected to Go RPC" {
-			// if error, try again
+		if !done {
+			// if not done yet, try again
 			log.Println("Connection error with ", addr, ": ", err)
 			conn.Close()
-		} else {
-			// else, we're done!
-			done = true
 		}
 	}
 
@@ -172,7 +176,7 @@ func (b *Parameters) MasterDial() *rpc.Client {
 	var conn net.Conn
 
 	addr = fmt.Sprintf("%s:%d", b.masterAddr, b.masterPort)
-	conn = Dial(addr)
+	conn = Dial(addr, true)
 	master = rpc.NewClient(conn)
 
 	return master
