@@ -82,7 +82,7 @@ func (b *Parameters) Connect() error {
 		} else if i == MAX_ATTEMPTS {
 			// if too many attempts, connect again
 			master.Close()
-			return errors.New("Too many connect attempts!")
+			return errors.New("Too many call attempts!")
 		}
 	}
 
@@ -115,7 +115,7 @@ func (b *Parameters) Connect() error {
 			} else if i == MAX_ATTEMPTS {
 				// if too many attempts, connect again
 				master.Close()
-				return errors.New("Too many connect attempts!")
+				return errors.New("Too many call attempts!")
 			}
 		}
 
