@@ -720,9 +720,21 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 }
 
 func (r *Replica) recover(instance int32) {
+
+	if r.instanceSpace[instance] == nil {
+		r.instanceSpace[r.crtInstance] = &Instance{
+			nil,
+			r.defaultBallot[r.Id],
+			r.defaultBallot[r.Id],
+			PREPARING,
+			nil}
+
+	}
+
 	if r.instanceSpace[instance].lb == nil{
 		r.instanceSpace[instance].lb = &LeaderBookkeeping{nil, 0, 0, 0, -1, nil, -1}
 	}
+
 	r.makeBallot(instance)
 	r.bcastPrepare(instance)
 }
