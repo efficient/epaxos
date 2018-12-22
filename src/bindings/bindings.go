@@ -225,7 +225,7 @@ func (b *Parameters) FindClosestReplica(replyRL *masterproto.GetReplicaListReply
 				minLatency = latency
 			}
 		} else {
-			log.Printf("cannot connect to " + b.replicaLists[i])
+			log.Printf("cannot ping " + b.replicaLists[i])
 			return err
 		}
 	}
