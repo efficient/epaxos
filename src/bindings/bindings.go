@@ -163,7 +163,9 @@ func Dial(addr string, connect bool) net.Conn {
 		if !done {
 			// if not done yet, try again
 			log.Println("Connection error with ", addr, ": ", err)
-			conn.Close()
+			if conn != nil {
+			   conn.Close()
+			}
 		}
 	}
 
