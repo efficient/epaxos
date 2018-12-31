@@ -78,7 +78,7 @@ fi
 #   -w int
 #     	Percentage of updates (writes).  (default 100)
 #   -s	replace read with short scan (100 elements)
-
+#   -l local read
 if [ "${TYPE}" == "client" ]; then
     args="-maddr ${MADDR} -mport ${MPORT} ${CLIENT_EXTRA_ARGS}"
 
