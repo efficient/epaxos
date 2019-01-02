@@ -621,7 +621,7 @@ func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
 	}
 
 	if preply.VBallot > lb.ballot {
-		dlog.Printf("Command(s) found \n")
+		dlog.Printf("Prior vote found \n")
 		lb.ballot = preply.VBallot
 		lb.cmds = preply.Command
 	}
@@ -728,7 +728,7 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 func (r *Replica) recover(instance int32) {
 
 	if r.instanceSpace[instance] == nil {
-		r.instanceSpace[r.crtInstance] = &Instance{
+		r.instanceSpace[instance] = &Instance{
 			nil,
 			r.defaultBallot[r.Id],
 			r.defaultBallot[r.Id],
@@ -778,8 +778,10 @@ func (r *Replica) executeCommands() {
 				if i == problemInstance {
 					timeout += SLEEP_TIME_NS
 					if timeout >= COMMIT_GRACE_PERIOD {
-						dlog.Printf("Recovering instance %d \n", i)
-						r.instancesToRecover <- problemInstance
+						for k := problemInstance; k <= r.crtInstance; k++ {
+							dlog.Printf("Recovering instance %d \n", k)
+							r.instancesToRecover <- k
+						}
 						problemInstance = 0
 						timeout = 0
 					}

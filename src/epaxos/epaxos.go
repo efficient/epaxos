@@ -431,8 +431,10 @@ func (r *Replica) executeCommands() {
 					if inst == problemInstance[q] {
 						timeout[q] += SLEEP_TIME_NS
 						if timeout[q] >= COMMIT_GRACE_PERIOD {
-							dlog.Printf("Recovering %d.%d", q, inst)
-							r.instancesToRecover <- &instanceId{q, inst}
+							for k := problemInstance[q]; k <= r.crtInstance[q]; k++ {
+								dlog.Printf("Recovering instance %d.%d", q, k)
+								r.instancesToRecover <- &instanceId{q, k}
+							}
 							timeout[q] = 0
 						}
 					} else {
