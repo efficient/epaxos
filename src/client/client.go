@@ -52,7 +52,7 @@ func main() {
 		clientId = uuid.New().String()
 	}
 
-	log.Printf("client: %v", clientId)
+	log.Printf("client: %v (verbose=%v, psize=%v, conflicts=%v)", clientId, *verbose, *psize, *conflicts)
 
 	karray := make([]state.Key, *reqsNb)
 	put := make([]bool, *reqsNb)
