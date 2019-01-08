@@ -10,7 +10,6 @@ import (
 	"genericsmrproto"
 	"io"
 	"log"
-	"math"
 	"state"
 	"sync"
 	"time"
@@ -23,14 +22,10 @@ const TRUE = uint8(1)
 const FALSE = uint8(0)
 const ADAPT_TIME_SEC = 10
 
-const MAX_BATCH = 1
-
 const COMMIT_GRACE_PERIOD = 10 * 1e9 // 10 second(s)
 
 const BF_K = 4
 const BF_M_N = 32.0
-
-var bf_PT uint32
 
 const HT_INIT_SIZE = 200000
 
@@ -79,6 +74,7 @@ type Replica struct {
 	instancesToRecover    chan *instanceId
 	IsLeader              bool // does this replica think it is the leader
 	maxRecvBallot         int32
+	batchWait             int
 }
 
 type Instance struct {
@@ -122,7 +118,7 @@ type LeaderBookkeeping struct {
 	leaderResponded   bool
 }
 
-func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bool, dreply bool, beacon bool, durable bool) *Replica {
+func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bool, dreply bool, beacon bool, durable bool, batchWait int) *Replica {
 	r := &Replica{
 		genericsmr.NewReplica(id, peerAddrList, thrifty, exec, lread, dreply),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
@@ -149,7 +145,8 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bo
 		new(sync.Mutex),
 		make(chan *instanceId, genericsmr.CHAN_BUFFER_SIZE),
 		false,
-		-1}
+		-1,
+		batchWait}
 
 	r.Beacon = beacon
 	r.Durable = durable
@@ -164,10 +161,6 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bo
 		r.ExecedUpTo[i] = -1
 		r.CommittedUpTo[i] = -1
 		r.conflicts[i] = make(map[state.Key]int32, HT_INIT_SIZE)
-	}
-
-	for bf_PT = 1; math.Pow(2, float64(bf_PT))/float64(MAX_BATCH) < BF_M_N; {
-		bf_PT++
 	}
 
 	r.exec = &Exec{r}
@@ -241,7 +234,7 @@ var slowClockChan chan bool
 
 func (r *Replica) fastClock() {
 	for !r.Shutdown {
-		time.Sleep(5 * 1e6) // 5 ms
+		time.Sleep(time.Duration(r.batchWait) * time.Millisecond) // ms
 		fastClockChan <- true
 	}
 }
@@ -272,6 +265,10 @@ func (r *Replica) stopAdapting() {
 	log.Println(r.PreferredPeerOrder)
 }
 
+func (r *Replica) BatchingEnabled() bool {
+	return r.batchWait > 0
+}
+
 /* ============= */
 
 /***********************************
@@ -291,8 +288,8 @@ func (r *Replica) run() {
 	fastClockChan = make(chan bool, 1)
 	go r.slowClock()
 
-	//Enabled when batching for 5ms
-	if MAX_BATCH > 100 {
+	//Enabled fast clock when batching
+	if r.BatchingEnabled() {
 		go r.fastClock()
 	}
 
@@ -313,7 +310,7 @@ func (r *Replica) run() {
 			r.handlePropose(propose)
 			//deactivate new proposals channel to prioritize the handling of other protocol messages,
 			//and to allow commands to accumulate for batching
-			if MAX_BATCH > 100 {
+			if r.BatchingEnabled() {
 				onOffProposeChan = nil
 			}
 			break
@@ -434,8 +431,10 @@ func (r *Replica) executeCommands() {
 					if inst == problemInstance[q] {
 						timeout[q] += SLEEP_TIME_NS
 						if timeout[q] >= COMMIT_GRACE_PERIOD {
-							dlog.Printf("Recovering %d.%d", q, inst)
-							r.instancesToRecover <- &instanceId{q, inst}
+							for k := problemInstance[q]; k <= r.crtInstance[q]; k++ {
+								dlog.Printf("Recovering instance %d.%d", q, k)
+								r.instancesToRecover <- &instanceId{q, k}
+							}
 							timeout[q] = 0
 						}
 					} else {
@@ -756,20 +755,6 @@ func equal(deps1 []int32, deps2 []int32) bool {
 	return true
 }
 
-func bfFromCommands(cmds []state.Command) *bloomfilter.Bloomfilter {
-	if cmds == nil {
-		return nil
-	}
-
-	bf := bloomfilter.NewPowTwo(bf_PT, BF_K)
-
-	for i := 0; i < len(cmds); i++ {
-		bf.AddUint64(uint64(cmds[i].K))
-	}
-
-	return bf
-}
-
 /**********************************************************************
 
                            PHASE 1
@@ -780,9 +765,6 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	//TODO!! Handle client retries
 
 	batchSize := len(r.ProposeChan) + 1
-	if batchSize > MAX_BATCH {
-		batchSize = MAX_BATCH
-	}
 	r.Mutex.Lock()
 	r.Stats.M["totalBatching"]++
 	r.Stats.M["totalBatchingSize"] += batchSize
@@ -1030,6 +1012,7 @@ func (r *Replica) handlePreAcceptReply(pareply *epaxosproto.PreAcceptReply) {
 		}
 		r.Mutex.Unlock()
 	} else if inst.lb.preAcceptOKs >= r.fastQuorumSize()-1 {
+		// } else if inst.lb.preAcceptOKs >= r.N/2 && !precondition {
 		dlog.Printf("Slow path %d.%d (inst.lb.allEqual=%t, allCommitted=%t, isInitialBallot=%t)\n", pareply.Replica, pareply.Instance, allEqual, allCommitted, isInitialBallot)
 		lb.status = epaxosproto.ACCEPTED
 
