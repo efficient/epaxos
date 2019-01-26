@@ -70,15 +70,18 @@ func (master *Master) run() {
 		master.lock.Unlock()
 		time.Sleep(100000000)
 	}
-	time.Sleep(2000000000)
+	time.Sleep(2000000000) // wait servers are up and rolling
 
 	// connect to SMR servers
-	for i := 0; i < master.N; i++ {
+	for i := 0; i < master.N; {
 		var err error
 		addr := fmt.Sprintf("%s:%d", master.addrList[i], master.portList[i]+1000)
 		master.nodes[i], err = rpc.DialHTTP("tcp", addr)
 		if err != nil {
-			log.Fatalf("Error connecting to replica %d (%v)\n", i,addr)
+			log.Printf("Error connecting to replica %d (%v), retrying .. \n", i,addr)
+			time.Sleep(1000000000) // retry
+		} else {
+			i++
 		}
 	}
 
