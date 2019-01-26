@@ -1426,20 +1426,21 @@ func (r *Replica) handleTryPreAccept(tpa *epaxosproto.TryPreAccept) {
 	confRep := int32(0)
 	confInst := int32(0)
 	confStatus := epaxosproto.NONE
-	if conflict, cr, ci := r.findPreAcceptConflicts(tpa.Command, tpa.Replica, tpa.Instance, tpa.Seq, tpa.Deps); conflict {
-		dlog.Printf("There is a conflict, can't pre-accept")
-		confRep = cr
-		confInst = ci
-	} else {
-		if tpa.Instance > r.crtInstance[tpa.Replica] {
-			r.crtInstance[tpa.Replica] = tpa.Instance
-			dlog.Printf("New crtInstance %d.%d", tpa.Replica, tpa.Instance)
+	if inst.Status == epaxosproto.NONE { // missing in TLA spec.
+		if conflict, cr, ci := r.findPreAcceptConflicts(tpa.Command, tpa.Replica, tpa.Instance, tpa.Seq, tpa.Deps); conflict {
+			dlog.Printf("There is a conflict, can't pre-accept")
+			confRep = cr
+			confInst = ci
+		} else {
+			if tpa.Instance > r.crtInstance[tpa.Replica] {
+				r.crtInstance[tpa.Replica] = tpa.Instance
+				dlog.Printf("New crtInstance %d.%d", tpa.Replica, tpa.Instance)
+			}
+			inst.Cmds = tpa.Command
+			inst.Seq = tpa.Seq
+			inst.Deps = tpa.Deps
+			inst.Status = epaxosproto.PREACCEPTED
 		}
-		inst.vbal = tpa.Ballot
-		inst.Cmds = tpa.Command
-		inst.Seq = tpa.Seq
-		inst.Deps = tpa.Deps
-		inst.Status = epaxosproto.PREACCEPTED
 	}
 
 	rtpa := &epaxosproto.TryPreAcceptReply{r.Id, tpa.Replica, tpa.Instance, inst.bal, inst.vbal, confRep, confInst, confStatus}
