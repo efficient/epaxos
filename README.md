@@ -1,12 +1,14 @@
 EPaxos
 ======
 
-based on efficient/epaxos -> morethan5
+Based on efficient/epaxos -> morethan5
 
-Fixes/Changes
-- add docker & kubernetes files 
-- add payload for commands
-- quorum now consists of the closest (alive) replicas
+Fixes/changes:
+- client bindings (w. Java support)
+- docker & k8s images
+- unit tests
+- several fixes in Paxos and Egalitarian Paxos
+- quorums built w. closest (alive) replica set
 
 Taken from https://github.com/efficient/epaxos
 
