@@ -42,7 +42,7 @@ func main() {
 	for {
 		proxy = bindings.NewParameters(*masterAddr, *masterPort, *verbose, *noLeader, *fast, *localReads)
 		err := proxy.Connect()
-		if err == nil{
+		if err == nil {
 			break
 		}
 		proxy.Disconnect()
@@ -88,9 +88,9 @@ func main() {
 			rand.Read(value)
 			proxy.Write(key, state.Value(value))
 		} else {
-			if *scan{
-				proxy.Scan(key,int64(100))
-			}else{
+			if *scan {
+				proxy.Scan(key, int64(100))
+			} else {
 				proxy.Read(key)
 			}
 		}
@@ -112,5 +112,5 @@ func main() {
 
 // convert nanosecond to millisecond
 func to_ms(nano int64) int64 {
-  return nano / int64(time.Millisecond)
+	return nano / int64(time.Millisecond)
 }
