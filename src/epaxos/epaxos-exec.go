@@ -80,14 +80,19 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 	for q := int32(0); q < int32(e.r.N); q++ {
 		inst := v.Deps[q]
 		for i := e.r.ExecedUpTo[q] + 1; i <= inst; i++ {
-			if e.r.InstanceSpace[q][i] == nil {
+			if e.r.InstanceSpace[q][i] == nil || e.r.InstanceSpace[q][i].Cmds == nil{
 				dlog.Printf("Null instance %d.%d\n", q, i)
 				return false
 			}
 
-			if e.r.InstanceSpace[q][i].Cmds == nil {
-				dlog.Printf("Null command %d.%d\n", q, i)
-				return false
+			if (e.r.transconf) {
+				for _, alpha := range v.Cmds {
+					for _, beta := range e.r.InstanceSpace[q][i].Cmds {
+						if !state.Conflict(&alpha, &beta) {
+							continue
+						}
+					}
+				}
 			}
 
 			if e.r.InstanceSpace[q][i].Status == epaxosproto.EXECUTED {

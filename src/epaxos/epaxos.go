@@ -35,6 +35,7 @@ const HT_INIT_SIZE = 200000
 // - remove checkpoints (need to fix them first)
 // - remove short commits (with N>7 propagating committed dependencies is necessary)
 // - must run with thriftiness on (recovery is incorrect otherwise)
+// - when conflicts are transitive skip waiting prior commuting commands
 
 var cpMarker []state.Command
 var cpcounter = 0
@@ -75,6 +76,7 @@ type Replica struct {
 	IsLeader              bool // does this replica think it is the leader
 	maxRecvBallot         int32
 	batchWait             int
+	transconf bool
 }
 
 type Instance struct {
@@ -118,7 +120,7 @@ type LeaderBookkeeping struct {
 	leaderResponded   bool
 }
 
-func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bool, dreply bool, beacon bool, durable bool, batchWait int) *Replica {
+func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bool, dreply bool, beacon bool, durable bool, batchWait int, transconf bool) *Replica {
 	r := &Replica{
 		genericsmr.NewReplica(id, peerAddrList, thrifty, exec, lread, dreply),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
@@ -146,7 +148,8 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bo
 		make(chan *instanceId, genericsmr.CHAN_BUFFER_SIZE),
 		false,
 		-1,
-		batchWait}
+		batchWait,
+	transconf}
 
 	r.Beacon = beacon
 	r.Durable = durable
