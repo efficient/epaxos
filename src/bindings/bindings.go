@@ -312,7 +312,7 @@ func (b *Parameters) execute(args genericsmrproto.Propose) []byte {
 	for err != nil {
 
 		submitter := b.Leader
-		if b.leaderless || ((args.Command.Op == state.GET || args.Command.Op == state.SCAN) && b.localReads) {
+		if b.leaderless  {
 			submitter = b.closestReplica
 		}
 
