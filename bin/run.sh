@@ -50,6 +50,9 @@ fi
 #     	Port # to listen on. Defaults to 7070 (default 7070)
 #   -thrifty
 #     	Use only as many messages as strictly required for inter-replica communication. (default true)
+#   -maxfailures int
+#     	maximumum numnber of tolerated failures (default is minority, ignored by other protocols than Paxos)
+
 
 if [ "${TYPE}" == "server" ]; then
     args="-addr ${ADDR} -port ${SPORT} -maddr ${MADDR} -mport ${MPORT} ${SERVER_EXTRA_ARGS}"

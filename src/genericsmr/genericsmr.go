@@ -63,6 +63,8 @@ type Replica struct {
 	Dreply  bool // reply to client after command has been executed?
 	Beacon  bool // send beacons to detect how fast are the other replicas?
 
+	F int
+
 	Durable     bool     // log to a stable store?
 	StableStore *os.File // file support for the persistent log
 
@@ -79,7 +81,7 @@ type Replica struct {
 	Stats *genericsmrproto.Stats
 }
 
-func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bool, dreply bool) *Replica {
+func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bool, dreply bool, failures int) *Replica {
 	r := &Replica{
 		len(peerAddrList),
 		int32(id),
@@ -98,6 +100,7 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, lread bo
 		lread,
 		dreply,
 		false,
+		failures,
 		false,
 		nil,
 		make([]int32, len(peerAddrList)),
@@ -135,7 +138,26 @@ func (r *Replica) BeTheLeader(args *genericsmrproto.BeTheLeaderArgs, reply *gene
 	return nil
 }
 
-/* ============= */
+/* Utils */
+
+func (r *Replica) FastQuorumSize() int {
+	return r.F + (r.F + 1)/2
+}
+
+func (r *Replica) SlowQuorumSize() int {
+	return (r.N + 1)/ 2
+}
+
+// Flexible Paxos
+func (r *Replica) WriteQuorumSize() int {
+	return r.F + 1
+}
+
+func (r *Replica) ReadQuorumSize() int {
+	return r.N - r.F
+}
+
+/* Network */
 
 func (r *Replica) ConnectToPeers() {
 	var b [4]byte

@@ -2,7 +2,7 @@
 
 LOGS=logs
 
-NSERVERS=7
+NSERVERS=5
 NCLIENTS=10
 CMDS=10000 # 500k total ~ 5min w. Paxos
 PSIZE=32
@@ -15,7 +15,8 @@ CLIENT=bin/client
 DIFF_TOOL=diff
 #DIFF_TOOL=merge
 
-failures=2
+maxfailures=1
+injected_failures=2
 
 master() {
     touch ${LOGS}/m.txt
@@ -31,7 +32,8 @@ servers() {
             -lread \
             -exec \
             -thrifty \
-            -e \
+	    -e \
+	    -maxfailures ${maxfailures} \
             -port ${port} >"${LOGS}/s_$i.txt" 2>&1 &
     done
 
@@ -51,7 +53,7 @@ clients() {
             -w 100 \
             -c 100 \
             -l \
-            -e \
+	    -e \
             -psize ${PSIZE} >"${LOGS}/c_$i.txt" 2>&1 &
     done
 
@@ -59,14 +61,14 @@ clients() {
     while [ ${ended} != ${NCLIENTS} ]; do
         ended=$(tail -n 1 logs/c_*.txt | grep "Test took" | wc -l)
         sleep 1
-        if ((${failures} > 0)); then
+        if ((${injected_failures} > 0)); then
             sleep 20
             leader=$(grep "new leader" ${LOGS}/m.txt | tail -n 1 | awk '{print $4}')
             port=$(grep "node ${leader} \[" ${LOGS}/m.txt | sed -n 's/.*\(:.*\]\).*/\1/p' | sed 's/[]:]//g')
             pid=$(ps -ef | grep "bin/server" | grep "${port}" | awk '{print $2}')
             echo ">>>>> Injecting failure... (${leader}, ${port}, ${pid})"
             kill -9 ${pid}
-            failures=$((failures - 1))
+            injected_failures=$((injected_failures - 1))
         fi
     done
     echo ">>>>> Clients ended!"
