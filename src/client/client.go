@@ -39,7 +39,6 @@ var successful []int
 var rarray []int
 var rsp []bool
 
-var roundLog = make(map[string]time.Duration, int64(*rounds))
 
 
 func main() {
@@ -204,7 +203,6 @@ func main() {
 		}
 
 		after := time.Now()
-		roundLog[fmt.Sprintf("Round: %d", j)] = after.Sub(before)
 		fmt.Printf("Round took %v\n", after.Sub(before))
 
 		if *check {
@@ -243,7 +241,6 @@ func main() {
 		}
 	}
 	master.Close()
-	writeRoundLog(roundLog)
 }
 
 func waitReplies(readers []*bufio.Reader, leader int, n int, done chan bool) {
@@ -268,14 +265,4 @@ func waitReplies(readers []*bufio.Reader, leader int, n int, done chan bool) {
 		}
 	}
 	done <- e
-}
-
-func writeRoundLog(roundLog map[string]time.Duration){
-	data, err := json.Marshal(roundLog)
-
-	if err != nil{
-		fmt.Println(err.Error())
-	}
-
-	err = ioutil.WriteFile("round_log.out",data,0755)
 }
