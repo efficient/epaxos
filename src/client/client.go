@@ -3,11 +3,9 @@ package main
 import (
 	"bufio"
 	"dlog"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"genericsmrproto"
-	"io/ioutil"
 	"log"
 	"masterproto"
 	"math/rand"
