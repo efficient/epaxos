@@ -1,7 +1,7 @@
 package main
 
 import (
-	"epaxos"
+	"epaxos/src/epaxos"
 	"flag"
 	"fmt"
 	"gpaxos"
