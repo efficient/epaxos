@@ -193,6 +193,6 @@ RemoveLogs
 wait
 Main
 wait
-DownloadLogs
-wait
+#DownloadLogs
+#wait
 EpKillAll
