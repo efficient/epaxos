@@ -3,7 +3,7 @@ ClientIps=(10.142.0.11 10.142.0.103 10.142.0.104)
 MasterIp=10.142.0.27
 FirstServerPort=17070 # change it when only necessary (i.e., firewall blocking, port in use)
 NumOfServerInstances=3 # before recompiling, try no more than 5 servers. See Known Issue # 4
-NumOfClientInstances=20 #20,40,60,80,100,200
+NumOfClientInstances=200 #20,40,60,80,100,200,300,400,500
 reqsNb=100000
 writes=50
 dlog=false
@@ -49,7 +49,7 @@ function runServersOneMachine() {
         svrPort=$((FirstServerPort + $idx))
         if [[ ${svrIpIdx} -eq ${EPMachineIdx} ]]
         then
-            "${EPaxosFolder}"/bin/server -port ${svrPort} -maddr ${MasterIp} -addr ${svrIp} -p 4 -thrifty=${thrifty} -e=true 2>&1 &
+            "${EPaxosFolder}"/bin/server -port ${svrPort} -maddr ${MasterIp} -addr ${svrIp} -p 4 -thrifty=${thrifty} 2>&1 &
         fi
     done
 }

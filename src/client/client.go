@@ -108,6 +108,7 @@ func main() {
 		var err error
 		servers[i], err = net.Dial("tcp", rlReply.ReplicaList[i])
 		if err != nil {
+			fmt.Printf("Error connecting to replica %d\n", i)
 			log.Printf("Error connecting to replica %d\n", i)
 		}
 		readers[i] = bufio.NewReader(servers[i])
