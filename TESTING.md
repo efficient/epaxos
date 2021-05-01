@@ -17,7 +17,10 @@
 
 
 ### Configuration(***In Each VM***)
-1. Inside ```epaxos.sh``` configure your Internal/External (Depends on zoning) Ips and run configs.
+1. Inside ```epaxos.sh``` configure:
+   1. Run Configs (NClients, etc.)
+   2. External/Internal IPs (Depending on zonage)
+   3. Paths to your folders/keys. I usually install in ``root``.
 2. For further debugging, you may also turn on the ```dlog``` which is the native logging service of Epaxos.
     1. Inside your epaxos folder, ```cd src/dlog && nano dlog.go```
     2. Edit this ```dlog = false```
