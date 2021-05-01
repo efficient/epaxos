@@ -21,6 +21,8 @@
    1. Run Configs (NClients, etc.)
    2. External/Internal IPs (Depending on zonage)
    3. Paths to your folders/keys. I usually install in ``root``.
+   4. An ***optional*** config, the proxy batch, can be modified in ```src/epaxos/epaxos.go``` in the constant ***MAX_BATCH***.
+   5. If you do config 4, make sure you recompile. 
 2. For further debugging, you may also turn on the ```dlog``` which is the native logging service of Epaxos.
     1. Inside your epaxos folder, ```cd src/dlog && nano dlog.go```
     2. Edit this ```dlog = false```
