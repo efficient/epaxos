@@ -83,7 +83,8 @@ def get_epaxos_client_statistics_v2(log_file_path):
         #     result["operations"] = int(line)
     latencies = latencies[int(len(latencies) * 0.1): int(len(latencies) * 0.9)]
     latencies.sort()
-    # print(latencies)
+    if len(latencies) == 0:
+        return {}
 
     result["duration"] = sum(latencies)
     result["operations"] = len(latencies)
@@ -95,6 +96,7 @@ def get_epaxos_client_statistics_v2(log_file_path):
 
 
 def analysis_epaxos_logs():
+    disconnects = 0
     params = get_experiments(argv[1])
     infos = []
     for param in params:
@@ -130,13 +132,12 @@ def analysis_epaxos_logs():
                 for i in range(info["C"][0]):
                     file = join(argv[1], f"{param}--client{i}.out")
                     futures.append(executor.submit(get_epaxos_client_statistics_v2, file))
-                futures_res = [f.result() for f in futures]
+                futures_res = [f.result() for f in futures if f.result() != {}]
+                disconnects = int(info["C"][0]) - len(futures_res) # get number of disconnects.
 
             info["totalRequests"] = (info["C"][0] * info["q"][0], "the total number of client requests")
-
             client_avg_duration = sum([d["duration"] for d in futures_res]) / len(futures_res) / 1000  # ms - sec
             info["clientAvgDuration"] = (round(client_avg_duration, 2), "client Avg Duration -- mid 80% (sec)")
-
             client_avg_latency = sum([d["average"] for d in futures_res]) / len(futures_res)
             info["clientAvgLatency"] = (round(client_avg_latency, 2), "client Avg Latency -- mid 80% (ms)")
 
@@ -156,11 +157,13 @@ def analysis_epaxos_logs():
             info["throughput"] = (
                 round(sum(clientthroughputs), 2), "sum of (client mid 80% requests * batch size / mid 80% time) (ops/sec)")
             infos.append(info)
-        return infos  # assume there's one param only
+        return infos, disconnects  # assume there's one param only
 
 
 if __name__ == '__main__':
-    infos = analysis_epaxos_logs()
+    infos, disconnects = analysis_epaxos_logs()
+    print(f"There were {disconnects} out of {infos[0]['C'][0]} clients who disconnected.")
+    print(f"The following info is for {int(infos[0]['C'][0]) - disconnects} successful clients.")
     if "print-title" in argv:
         if len(infos) != 0:
             for k, v in infos[0].items():
