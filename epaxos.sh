@@ -1,17 +1,17 @@
-ServerIps=(10.142.0.27 10.142.0.37 10.142.0.63) # 3
-ClientIps=(10.142.0.11 10.142.0.103 10.142.0.104)
-MasterIp=10.142.0.27
+ServerIps=(10.10.1.1 10.10.1.2 10.10.1.3) # 3
+ClientIps=(10.10.1.4)
+MasterIp=10.10.1.1
 FirstServerPort=17070 # change it when only necessary (i.e., firewall blocking, port in use)
 NumOfServerInstances=3 # before recompiling, try no more than 5 servers. See Known Issue # 4
-NumOfClientInstances=500 #20,40,60,80,100,200,300,400,500
-reqsNb=10000
+NumOfClientInstances=2 #20,40,60,80,100,200,300,400,500
+reqsNb=1000
 writes=50
 dlog=false
 conflicts=0
 thrifty=false
 
 # if closed-loop, uncomment two lines below
-clientBatchSize=10
+clientBatchSize=1
 rounds=$((reqsNb / clientBatchSize))
 # if open-loop, uncomment the line below
 #rounds=1 # open-loop
